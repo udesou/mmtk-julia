@@ -12,7 +12,6 @@ extern void *sysimg_end;
 extern JL_DLLEXPORT void *jl_get_ptls_states(void);
 extern jl_ptls_t get_next_mutator_tls();
 extern jl_value_t *cmpswap_names JL_GLOBALLY_ROOTED;
-extern jl_array_t *jl_global_roots_table JL_GLOBALLY_ROOTED;
 extern void jl_gc_premark(jl_ptls_t ptls2);
 extern uint64_t finalizer_rngState[4];
 
@@ -364,8 +363,6 @@ static void queue_roots(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp)
     add_object_to_mmtk_roots(jl_emptytuple_type);
     if (cmpswap_names != NULL)
         add_object_to_mmtk_roots(cmpswap_names);
-    add_object_to_mmtk_roots(jl_global_roots_table);
-
 }
 
 static void jl_gc_queue_bt_buf_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp, jl_ptls_t ptls2)
