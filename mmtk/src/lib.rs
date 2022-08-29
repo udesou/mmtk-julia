@@ -145,6 +145,7 @@ pub struct Julia_Upcalls {
     pub get_jl_last_err: extern "C" fn () -> usize,
     pub set_jl_last_err: extern "C" fn (errno: usize),
     pub get_lo_size: extern "C" fn (object: ObjectReference) -> usize,
+    pub get_so_size: extern "C" fn (object: ObjectReference, actual_size: usize) -> usize,
     pub wait_for_the_world: extern "C" fn (),
     pub set_gc_initial_state: extern "C" fn (tls: OpaquePointer) -> i64,
     pub set_gc_final_state: extern "C" fn (old_state: usize),

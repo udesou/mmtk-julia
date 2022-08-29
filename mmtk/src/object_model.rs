@@ -124,10 +124,15 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
                 ((*UPCALLS).get_lo_size)(object)
             }
         } else {
-            unsafe {
+            let obj_size = unsafe {
                 let addr_size = object.to_address() - 2*JULIA_HEADER_SIZE;
                 addr_size.load::<u64>() as usize
-            }            
+            };
+            let so_size_from_julia = unsafe {
+                ((*UPCALLS).get_so_size)(object, obj_size)
+            };
+            assert_eq!(obj_size, so_size_from_julia);
+            obj_size
         };
 
         size

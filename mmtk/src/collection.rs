@@ -60,7 +60,7 @@ impl Collection<JuliaVM> for VMCollection {
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
-        trace!("Triggered GC!");
+        info!("Triggered GC!");
         
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);

@@ -45,6 +45,9 @@ extern void* mmtk_calloc(size_t n, size_t size);
 extern void* mmtk_realloc(void* addr, size_t size);
 extern void* mmtk_realloc_with_old_size(void* addr, size_t size, size_t old_size);
 extern void mmtk_free_with_size(void* addr, size_t old_size);
+extern void* mmtk_malloc_aligned(size_t size, size_t alignment);
+extern void* mmtk_realloc_aligned_with_old_size(void* addr, size_t size, size_t old_size, size_t alignment);
+extern void mmtk_free_aligned(void* addr);
 extern void mmtk_free(void* addr);
 
 extern bool is_live_object(void* ref);
@@ -86,6 +89,7 @@ typedef struct {
     void (* get_jl_last_err) (void);
     void (* set_jl_last_err) (int errno);
     void (* get_lo_size) (void* obj);
+    void (* get_so_size) (void* obj, size_t actual_size);
     void (* wait_for_the_world) (void);
     void (* set_gc_initial_state) (void* tls);
     void (* set_gc_final_state) (int old_state);

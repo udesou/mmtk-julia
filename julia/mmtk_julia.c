@@ -27,7 +27,7 @@ JL_DLLEXPORT void (jl_mmtk_harness_end)(void)
     harness_end();
 }
 
-JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(int pool_offset, int osize)
+JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(jl_ptls_t ptls, int pool_offset, int osize)
 {
     // safepoint
     if (__unlikely(jl_atomic_load(&jl_gc_running))) {
@@ -39,16 +39,15 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(int pool_offset, int osiz
     }
 
     jl_value_t *v;
-    jl_ptls_t ptls = jl_get_ptls_states();
 
-    ptls->mmtk_mutator_ptr->allocators.immix[0].cursor = ptls->cursor;
+    // ptls->mmtk_mutator_ptr->allocators.immix[0].cursor = ptls->cursor;
 
     // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
     jl_taggedvalue_t *v_tagged =
         alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
 
-    ptls->cursor = ptls->mmtk_mutator_ptr->allocators.immix[0].cursor;
-    ptls->limit = ptls->mmtk_mutator_ptr->allocators.immix[0].limit;
+    // ptls->cursor = ptls->mmtk_mutator_ptr->allocators.immix[0].cursor;
+    // ptls->limit = ptls->mmtk_mutator_ptr->allocators.immix[0].limit;
 
     jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
 
@@ -79,7 +78,7 @@ STATIC_INLINE void* alloc_default_object(jl_ptls_t ptls, size_t size) {
 }
 
 JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offset,
-                                                    int osize)
+                                                    int osize, void *ty)
 {
     // safepoint
     if (__unlikely(jl_atomic_load(&jl_gc_running))) {
@@ -90,12 +89,32 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
         jl_atomic_store_release(&ptls->gc_state, old_state);
     }
 
-    jl_value_t *v;    
+    jl_value_t *v;
+    jl_taggedvalue_t *v_tagged;
+    
+    if (ty == jl_string_type) {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 8, 0, 0);
+    } else {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
+    }
     // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-    jl_taggedvalue_t *v_tagged = alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t));
+    
+    
+    // alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t));
 
     jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+
     v = jl_valueof(v_tagged_aligned);
+
+    // if(ty && ty != jl_buff_tag) {
+    //     if (((jl_datatype_t*)ty)->name == jl_array_typename && (osize + sizeof(jl_taggedvalue_t) == 72 || osize + sizeof(jl_taggedvalue_t) == 56)) {
+    //         FILE *fp;
+    //         fp = fopen("/home/eduardo/mmtk-julia/allocarray_obj.log", "a");
+    //         fprintf(fp, "allocating array at %p of type = %p: osize + sizeof(jl_taggedvalue_t) = %d\n", v, ty, osize + sizeof(jl_taggedvalue_t));
+    //         fflush(fp);
+    //         fclose(fp);
+    //     }
+    // }
 
     post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
     ptls->gc_num.allocd += osize;
@@ -152,17 +171,11 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
         mallocarray_t **pma = &ptls2->heap.mallocarrays;
         while (ma != NULL) {
             mallocarray_t *nxt = ma->next;
-            if (!object_is_managed_by_mmtk(ma->a)) {
-                printf("passing on sweeping malloced array\n");
-                fflush(stdout);
+            if (object_is_managed_by_mmtk(ma->a) && is_live_object(ma->a)) {
                 pma = &ma->next;
-                ma = nxt;
-                continue;
-            }
-            if (is_live_object(ma->a)) {
+            } else if (boot_image_object_has_been_marked(ma->a)) {
                 pma = &ma->next;
-            }
-            else {
+            } else {
                 *pma = nxt;
                 assert(ma->a->flags.how == 2);
                 jl_gc_free_array(ma->a);
@@ -178,6 +191,30 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
 
 extern void mark_metadata_scanned(jl_value_t* obj);
 extern int check_metadata_scanned(jl_value_t* obj);
+
+// check if the non-MMTk object has been marked before freeing its array
+int boot_image_object_has_been_marked(jl_value_t* obj) 
+{
+    jl_taggedvalue_t *o = jl_astaggedvalue(obj);
+    uintptr_t tag = (jl_value_t*)jl_typeof(obj);
+    jl_datatype_t *vt = (jl_datatype_t*)tag;
+
+    if (vt == jl_symbol_type) {
+        return 1;
+    };
+
+    // if the boot image hasn't been built, assume it's live
+    if (sysimg_base == NULL) {
+        return 1;
+    }
+
+    // if its beyond the boot image, assume it is live
+    if ((void*)obj < sysimg_base || (void*)obj >= sysimg_end) {
+        return 1;
+    }
+
+    return check_metadata_scanned(obj);
+}
 
 int object_has_been_scanned(jl_value_t* obj) 
 {
@@ -274,6 +311,115 @@ void wait_for_the_world(void)
 size_t get_lo_size(bigval_t obj) 
 {
     return obj.sz;
+}
+
+// compute # of extra words needed to store dimensions
+STATIC_INLINE int mmtk_jl_array_ndimwords(uint32_t ndims) JL_NOTSAFEPOINT
+{
+    return (ndims < 3 ? 0 : ndims-2);
+}
+
+#if defined(_P64) && defined(UINT128MAX)
+typedef __uint128_t wideint_t;
+#else
+typedef uint64_t wideint_t;
+#endif
+
+#define MAXINTVAL (((size_t)-1)>>1)
+
+JL_DLLEXPORT int mmtk_jl_array_validate_dims(jl_array_t* a, size_t *nel, size_t *tot, uint32_t ndims, size_t elsz)
+{
+    size_t i;
+    size_t _nel = 1;
+    for(i=0; i < ndims; i++) {
+        size_t di = jl_array_dim(a, i);
+        wideint_t prod = (wideint_t)_nel * (wideint_t)di;
+        if (prod >= (wideint_t) MAXINTVAL || di >= MAXINTVAL)
+            return 1;
+        _nel = prod;
+    }
+    wideint_t prod = (wideint_t)elsz * (wideint_t)_nel;
+    if (prod >= (wideint_t) MAXINTVAL)
+        return 2;
+    *nel = _nel;
+    *tot = (size_t)prod;
+    return 0;
+}
+
+size_t get_so_size(jl_value_t* obj, size_t actual_size) 
+{
+    uintptr_t tag = (jl_value_t*)jl_typeof(obj);
+    jl_datatype_t *vt = (jl_datatype_t*)tag;
+
+    if (vt == jl_buff_tag) {
+        // FIXME how to get the size of buff_tag?
+        // printf("Checking object = %p size based on its type = %s\n", obj, type_name);
+        // printf("Actual size = %d\n", actual_size);
+        // fflush(stdout);
+        return actual_size;
+    } else if (vt->name == jl_array_typename) {
+        // FIXME how to get the size of arrays?
+        return actual_size;
+    //  FIXME: for the types below one of + sizeof(jl_taggedvalue_t) should be removed when we stop storing the size in the header
+    } else if (vt == jl_simplevector_type) {
+        size_t l = jl_svec_len(obj);
+        int pool_id = jl_gc_szclass(l * sizeof(void*) + sizeof(jl_svec_t) + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        // printf("size of simplevector_type = %d\n", osize);
+        if (osize != actual_size) {
+            printf("sizes differ for jl_simplevector_type\n");
+            fflush(stdout);
+        }
+        return osize;
+    } else if (vt == jl_module_type) {
+        size_t dtsz = sizeof(jl_module_t);
+        int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        if (osize != actual_size) {
+            printf("sizes differ for jl_module_type\n");
+            fflush(stdout);
+        }
+        return osize;
+    } else if (vt == jl_task_type) {
+        size_t dtsz = sizeof(jl_task_t);
+        int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        if (osize != actual_size) {
+            printf("sizes differ for jl_task_type");
+            fflush(stdout);
+        }
+        return osize;
+    } else if (vt == jl_string_type) {
+        size_t dtsz = jl_string_len(obj) + sizeof(size_t) + 1;
+        int pool_id = jl_gc_szclass_align8(dtsz + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        if (osize != actual_size) {
+            printf("sizes differ for jl_string_type\n");
+            printf("obj = %p, osize = %d, actual size = %d\n", obj, osize, actual_size);
+            fflush(stdout);
+        } 
+        return osize;
+    } if (vt == jl_method_type) {
+        size_t dtsz = sizeof(jl_method_t);
+        int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        if (osize != actual_size) {
+            const char *type_name = jl_typeof_str(obj);
+            printf("sizes differ for jl_method_type %s\n", type_name);
+            fflush(stdout);
+        }
+        return osize;
+    } else  {
+        size_t dtsz = jl_datatype_size(vt);
+        int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
+        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
+        if (osize != actual_size) {
+            const char *type_name = jl_typeof_str(obj);
+            printf("sizes differ for datatype %s\n", type_name);
+            fflush(stdout);
+        }
+        return osize;
+    }
 }
 
 void set_jl_last_err(int e) 
@@ -831,7 +977,8 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
 }
 
 
-Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
+Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, 
+                               get_lo_size, get_so_size,
                                wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
                                mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint
