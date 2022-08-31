@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use crate::reference_glue::JuliaFinalizableObject;
 use crate::{ARE_MUTATORS_BLOCKED, BUILDER, UC_COND, STFF_COND, DISABLED_GC, FINALIZERS_RUNNING, USER_TRIGGERED_GC, MUTATORS, MUTATOR_TLS, get_mutator_ref, set_julia_obj_header_size};
 use log::info;
-use crate::util::store_obj_size;
 
 #[no_mangle]
 pub extern "C" fn gc_init(heap_size: usize, calls: *const Julia_Upcalls, header_size: usize) {
@@ -124,7 +123,7 @@ pub extern "C" fn post_alloc(mutator: *mut Mutator<JuliaVM>, refer: ObjectRefere
             memory_manager::post_alloc::<JuliaVM>(unsafe { &mut *mutator }, refer, bytes, semantics)
         },
         _ => {
-            store_obj_size(refer, bytes);
+            // store_obj_size(refer, bytes);
             memory_manager::post_alloc::<JuliaVM>(unsafe { &mut *mutator }, refer, bytes, semantics)
         }
     }

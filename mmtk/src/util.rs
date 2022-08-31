@@ -3,12 +3,11 @@ use crate::api::{start_control_collector, start_worker};
 use mmtk::util::opaque_pointer::*;
 use crate::JuliaVM;
 use mmtk::scheduler::{GCWorker, GCController};
-use crate::{ROOTS, GLOBAL_ROOTS};
+use crate::{ROOTS, GLOBAL_ROOTS, OBJ_2_START_REF, OBJ_2_SIZE};
 use mmtk::util::ObjectReference;
 use mmtk::util::Address;
 use enum_map::Enum;
 use crate::scanning::object_is_managed_by_mmtk;
-
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, Enum, PartialEq, Hash, Eq)]
@@ -97,5 +96,37 @@ pub fn store_obj_size(obj: ObjectReference, size : usize) {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn store_obj_size_c(obj: ObjectReference, size : usize) {
+    let addr_size = obj.to_address() - 16;
+    unsafe {
+        addr_size.store::<u64>(size as u64);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn get_obj_size(obj: ObjectReference) -> usize {
+
+    let obj_size_map = OBJ_2_SIZE.read().unwrap();
+    let size_from_map = obj_size_map.get(&obj.to_address());
+    let size = match size_from_map {
+        Some(v) => {
+            *v
+        },
+        None => {
+            panic!();
+        }
+    };
+    size
+}
+
+#[no_mangle]
+pub extern "C" fn obj_2_obj_size(obj: Address, size: usize) {
+    OBJ_2_SIZE.write().unwrap().insert(obj, size);
+}
 
 
+#[no_mangle]
+pub extern "C" fn obj_2_obj_start_ref(obj: Address, start_ref: Address) {
+    OBJ_2_START_REF.write().unwrap().insert(obj, start_ref);
+}

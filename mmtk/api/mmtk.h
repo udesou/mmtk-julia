@@ -90,6 +90,7 @@ typedef struct {
     void (* set_jl_last_err) (int errno);
     void (* get_lo_size) (void* obj);
     void (* get_so_size) (void* obj, size_t actual_size);
+    void (* get_obj_start_ref) (void* obj);
     void (* wait_for_the_world) (void);
     void (* set_gc_initial_state) (void* tls);
     void (* set_gc_final_state) (int old_state);

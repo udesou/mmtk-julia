@@ -2,7 +2,7 @@ use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::ObjectModel;
 use std::sync::atomic::Ordering;
 use mmtk::util::copy::*;
-use crate::{JuliaVM, JULIA_HEADER_SIZE, UPCALLS, init_boot_image_metadata_info};
+use crate::{JuliaVM, UPCALLS, init_boot_image_metadata_info, JULIA_HEADER_SIZE, OBJ_2_SIZE};
 use mmtk::util::constants::BYTES_IN_PAGE;
 use mmtk::util::metadata::side_metadata::{
     SideMetadataSpec, SideMetadataOffset, SideMetadataContext
@@ -125,16 +125,23 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             }
         } else {
             let obj_size = unsafe {
-                let addr_size = object.to_address() - 2*JULIA_HEADER_SIZE;
-                addr_size.load::<u64>() as usize
+                ((*UPCALLS).get_so_size)(object)
             };
-            let so_size_from_julia = unsafe {
-                ((*UPCALLS).get_so_size)(object, obj_size)
+
+            let obj_size_map = OBJ_2_SIZE.read().unwrap();
+            let size_from_map = obj_size_map.get(&object.to_address());
+            match size_from_map {
+                Some(v) => {
+                    assert_eq!(obj_size, *v);
+                },
+                None => {
+                    panic!();
+                }
             };
-            assert_eq!(obj_size, so_size_from_julia);
+            
             obj_size
         };
-
+        
         size
     }
 
@@ -163,7 +170,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             object.to_address() - 48
         } else {
             unsafe {
-                object.to_address() - 2*JULIA_HEADER_SIZE
+                object.to_address() - JULIA_HEADER_SIZE
             }
         };
         res

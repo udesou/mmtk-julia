@@ -13,6 +13,7 @@ extern JL_DLLEXPORT void *jl_get_ptls_states(void);
 extern jl_ptls_t get_next_mutator_tls();
 extern jl_value_t *cmpswap_names JL_GLOBALLY_ROOTED;
 extern jl_array_t *jl_global_roots_table JL_GLOBALLY_ROOTED;
+extern jl_typename_t *jl_array_typename JL_GLOBALLY_ROOTED;
 extern void jl_gc_premark(jl_ptls_t ptls2);
 extern uint64_t finalizer_rngState[4];
 
@@ -27,7 +28,7 @@ JL_DLLEXPORT void (jl_mmtk_harness_end)(void)
     harness_end();
 }
 
-JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(jl_ptls_t ptls, int pool_offset, int osize)
+JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(jl_ptls_t ptls, int pool_offset, int osize, void *ty)
 {
     // safepoint
     if (__unlikely(jl_atomic_load(&jl_gc_running))) {
@@ -39,21 +40,14 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(jl_ptls_t ptls, int pool_
     }
 
     jl_value_t *v;
+    jl_taggedvalue_t *v_tagged;
+    
+    v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+    // jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+    v = jl_valueof(v_tagged);
+    obj_2_obj_size(v, osize);
+    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
 
-    // ptls->mmtk_mutator_ptr->allocators.immix[0].cursor = ptls->cursor;
-
-    // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-    jl_taggedvalue_t *v_tagged =
-        alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
-
-    // ptls->cursor = ptls->mmtk_mutator_ptr->allocators.immix[0].cursor;
-    // ptls->limit = ptls->mmtk_mutator_ptr->allocators.immix[0].limit;
-
-    jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
-
-    v = jl_valueof(v_tagged_aligned);
-
-    post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
 
@@ -77,6 +71,8 @@ STATIC_INLINE void* alloc_default_object(jl_ptls_t ptls, size_t size) {
     }
 }
 
+int printed = 0;
+
 JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offset,
                                                     int osize, void *ty)
 {
@@ -92,31 +88,12 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     jl_value_t *v;
     jl_taggedvalue_t *v_tagged;
     
-    if (ty == jl_string_type) {
-        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 8, 0, 0);
-    } else {
-        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
-    }
-    // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-    
-    
-    // alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t));
+    v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+    // jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+    v = jl_valueof(v_tagged);
+    obj_2_obj_size(v, osize);
+    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
 
-    jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
-
-    v = jl_valueof(v_tagged_aligned);
-
-    // if(ty && ty != jl_buff_tag) {
-    //     if (((jl_datatype_t*)ty)->name == jl_array_typename && (osize + sizeof(jl_taggedvalue_t) == 72 || osize + sizeof(jl_taggedvalue_t) == 56)) {
-    //         FILE *fp;
-    //         fp = fopen("/home/eduardo/mmtk-julia/allocarray_obj.log", "a");
-    //         fprintf(fp, "allocating array at %p of type = %p: osize + sizeof(jl_taggedvalue_t) = %d\n", v, ty, osize + sizeof(jl_taggedvalue_t));
-    //         fflush(fp);
-    //         fclose(fp);
-    //     }
-    // }
-
-    post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
 
@@ -171,9 +148,12 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
         mallocarray_t **pma = &ptls2->heap.mallocarrays;
         while (ma != NULL) {
             mallocarray_t *nxt = ma->next;
-            if (object_is_managed_by_mmtk(ma->a) && is_live_object(ma->a)) {
+            if (!object_is_managed_by_mmtk(ma->a)) {
                 pma = &ma->next;
-            } else if (boot_image_object_has_been_marked(ma->a)) {
+                ma = nxt;
+                continue;
+            }
+            if (object_is_managed_by_mmtk(ma->a) && is_live_object(ma->a)) {
                 pma = &ma->next;
             } else {
                 *pma = nxt;
@@ -332,7 +312,7 @@ JL_DLLEXPORT int mmtk_jl_array_validate_dims(jl_array_t* a, size_t *nel, size_t 
     size_t i;
     size_t _nel = 1;
     for(i=0; i < ndims; i++) {
-        size_t di = jl_array_dim(a, i);
+        size_t di = jl_array_dim(a, i) - 1;
         wideint_t prod = (wideint_t)_nel * (wideint_t)di;
         if (prod >= (wideint_t) MAXINTVAL || di >= MAXINTVAL)
             return 1;
@@ -346,78 +326,77 @@ JL_DLLEXPORT int mmtk_jl_array_validate_dims(jl_array_t* a, size_t *nel, size_t 
     return 0;
 }
 
-size_t get_so_size(jl_value_t* obj, size_t actual_size) 
+#define JL_ARRAY_ALIGN(jl_value, nbytes) LLT_ALIGN(jl_value, nbytes)
+
+void* get_obj_start_ref(jl_value_t* obj) 
+{
+    uintptr_t tag = (jl_value_t*)jl_typeof(obj);
+    jl_datatype_t *vt = (jl_datatype_t*)tag;
+
+    void* obj_start_ref;
+
+    if (vt && jl_array_typename && (vt == jl_buff_tag || ((jl_datatype_t*)vt)->name == jl_array_typename)) {
+        obj_start_ref = (void*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
+        if (vt != jl_buff_tag) {
+            FILE *fp;
+            fp = fopen("/home/eduardo/mmtk-julia/get_obj_start_ref_array.log", "a");
+            fprintf(fp, "obj = %p, ty = %s, start_ref = %p\n", obj, jl_typename_str(vt), obj_start_ref);
+            fflush(fp);
+            fclose(fp);
+        }
+    } else {
+        obj_start_ref = (void*)((size_t)obj - sizeof(jl_taggedvalue_t));
+        // FILE *fp;
+        // fp = fopen("/home/eduardo/mmtk-julia/get_obj_start_ref_non_array.log", "a");
+        // fprintf(fp, "obj = %p, ty = %s, start_ref = %p\n", obj, jl_typename_str(vt), obj_start_ref);
+        // fflush(fp);
+        // fclose(fp);
+    }
+
+    return obj_start_ref;
+}
+
+
+size_t get_so_size(jl_value_t* obj) 
 {
     uintptr_t tag = (jl_value_t*)jl_typeof(obj);
     jl_datatype_t *vt = (jl_datatype_t*)tag;
 
     if (vt == jl_buff_tag) {
-        // FIXME how to get the size of buff_tag?
-        // printf("Checking object = %p size based on its type = %s\n", obj, type_name);
-        // printf("Actual size = %d\n", actual_size);
-        // fflush(stdout);
-        return actual_size;
+        // size_t* size_ptr = (size_t*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
+        return get_obj_size(obj);
     } else if (vt->name == jl_array_typename) {
-        // FIXME how to get the size of arrays?
-        return actual_size;
-    //  FIXME: for the types below one of + sizeof(jl_taggedvalue_t) should be removed when we stop storing the size in the header
+        // size_t* size_ptr = (size_t*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
+        return get_obj_size(obj);
     } else if (vt == jl_simplevector_type) {
         size_t l = jl_svec_len(obj);
         int pool_id = jl_gc_szclass(l * sizeof(void*) + sizeof(jl_svec_t) + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        // printf("size of simplevector_type = %d\n", osize);
-        if (osize != actual_size) {
-            printf("sizes differ for jl_simplevector_type\n");
-            fflush(stdout);
-        }
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     } else if (vt == jl_module_type) {
         size_t dtsz = sizeof(jl_module_t);
         int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        if (osize != actual_size) {
-            printf("sizes differ for jl_module_type\n");
-            fflush(stdout);
-        }
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     } else if (vt == jl_task_type) {
         size_t dtsz = sizeof(jl_task_t);
         int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        if (osize != actual_size) {
-            printf("sizes differ for jl_task_type");
-            fflush(stdout);
-        }
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     } else if (vt == jl_string_type) {
         size_t dtsz = jl_string_len(obj) + sizeof(size_t) + 1;
         int pool_id = jl_gc_szclass_align8(dtsz + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        if (osize != actual_size) {
-            printf("sizes differ for jl_string_type\n");
-            printf("obj = %p, osize = %d, actual size = %d\n", obj, osize, actual_size);
-            fflush(stdout);
-        } 
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     } if (vt == jl_method_type) {
         size_t dtsz = sizeof(jl_method_t);
         int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        if (osize != actual_size) {
-            const char *type_name = jl_typeof_str(obj);
-            printf("sizes differ for jl_method_type %s\n", type_name);
-            fflush(stdout);
-        }
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     } else  {
         size_t dtsz = jl_datatype_size(vt);
         int pool_id = jl_gc_szclass(dtsz + sizeof(jl_taggedvalue_t));
-        int osize = jl_gc_sizeclasses[pool_id] + sizeof(jl_taggedvalue_t);
-        if (osize != actual_size) {
-            const char *type_name = jl_typeof_str(obj);
-            printf("sizes differ for datatype %s\n", type_name);
-            fflush(stdout);
-        }
+        int osize = jl_gc_sizeclasses[pool_id];
         return osize;
     }
 }
@@ -978,7 +957,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
 
 
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, 
-                               get_lo_size, get_so_size,
+                               get_lo_size, get_so_size, get_obj_start_ref, 
                                wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
                                mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint

@@ -116,6 +116,13 @@ lazy_static! {
     // finalizer variables
     pub static ref STFF_COND: Arc<(Mutex<usize>, Condvar)> =
         Arc::new((Mutex::new(0), Condvar::new()));
+
+
+
+    pub static ref OBJ_2_SIZE: RwLock<HashMap<Address, usize>> =
+        RwLock::new(HashMap::new());  
+    pub static ref OBJ_2_START_REF: RwLock<HashMap<Address, Address>> =
+        RwLock::new(HashMap::new());   
 }
 
 #[link(name = "runtime_gc_c")]
@@ -145,7 +152,8 @@ pub struct Julia_Upcalls {
     pub get_jl_last_err: extern "C" fn () -> usize,
     pub set_jl_last_err: extern "C" fn (errno: usize),
     pub get_lo_size: extern "C" fn (object: ObjectReference) -> usize,
-    pub get_so_size: extern "C" fn (object: ObjectReference, actual_size: usize) -> usize,
+    pub get_so_size: extern "C" fn (object: ObjectReference) -> usize,
+    pub get_object_start_ref: extern "C" fn (object: ObjectReference) -> Address,
     pub wait_for_the_world: extern "C" fn (),
     pub set_gc_initial_state: extern "C" fn (tls: OpaquePointer) -> i64,
     pub set_gc_final_state: extern "C" fn (old_state: usize),
