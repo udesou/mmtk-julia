@@ -60,7 +60,7 @@ impl Collection<JuliaVM> for VMCollection {
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
-        println!("Triggered GC!");
+        info!("Triggered GC!");
         
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
@@ -118,7 +118,7 @@ impl Collection<JuliaVM> for VMCollection {
             }
         }
 
-        println!("GC Done!");
+        info!("GC Done!");
 
         unsafe {
             ((*UPCALLS).set_gc_final_state)(old_state as usize)

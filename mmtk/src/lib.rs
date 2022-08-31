@@ -117,11 +117,7 @@ lazy_static! {
     pub static ref STFF_COND: Arc<(Mutex<usize>, Condvar)> =
         Arc::new((Mutex::new(0), Condvar::new()));
 
-
-
     pub static ref OBJ_2_SIZE: RwLock<HashMap<Address, usize>> =
-        RwLock::new(HashMap::new());  
-    pub static ref OBJ_2_START_REF: RwLock<HashMap<Address, Address>> =
         RwLock::new(HashMap::new());   
 }
 

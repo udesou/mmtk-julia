@@ -367,7 +367,38 @@ size_t get_so_size(jl_value_t* obj)
         return get_obj_size(obj);
     } else if (vt->name == jl_array_typename) {
         // size_t* size_ptr = (size_t*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
-        return get_obj_size(obj);
+        jl_array_t* a = (jl_array_t*) obj;
+        if (a->flags.how == 0) {
+            return get_obj_size(obj);
+        } else if (a->flags.how == 1) {
+            int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
+            int tsz = sizeof(jl_array_t) + ndimwords*sizeof(size_t);
+            int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
+            int osize = jl_gc_sizeclasses[pool_id];
+
+            // if (osize != get_obj_size(obj)) {
+            //     printf("Object %p with a->flags.how == 1 has changed its buffer?\n", obj);
+            //     fflush(stdout);
+            // }
+            return osize;
+        } else if (a->flags.how == 2) {
+            int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
+            int tsz = sizeof(jl_array_t) + ndimwords*sizeof(size_t);
+            int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
+            int osize = jl_gc_sizeclasses[pool_id];
+
+            // if (osize != get_obj_size(obj)) {
+            //     printf("Object %p with a->flags.how == 2 has changed its buffer?\n", obj);
+            //     fflush(stdout);
+            // }
+            return osize;
+        } else if (a->flags.how == 3) {
+            int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
+            int tsz = sizeof(jl_array_t) + ndimwords * sizeof(size_t) + sizeof(void*);
+            int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
+            int osize = jl_gc_sizeclasses[pool_id];
+            return osize;
+        }
     } else if (vt == jl_simplevector_type) {
         size_t l = jl_svec_len(obj);
         int pool_id = jl_gc_szclass(l * sizeof(void*) + sizeof(jl_svec_t) + sizeof(jl_taggedvalue_t));
