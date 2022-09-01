@@ -42,11 +42,22 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(jl_ptls_t ptls, int pool_
     jl_value_t *v;
     jl_taggedvalue_t *v_tagged;
     
-    v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
-    // jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
-    v = jl_valueof(v_tagged);
-    obj_2_obj_size(v, osize);
-    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    if (ty != jl_buff_tag) {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+        v = jl_valueof(v_tagged);
+        post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    } else {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
+        jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+        v = jl_valueof(v_tagged_aligned);
+        store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
+        post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
+    }
+
+    if (ty == jl_buff_tag) {
+        printf("ALLOCATING BUFFER FROM LLVM!!!!!!!\n");
+        fflush(stdout);
+    }
 
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
@@ -88,11 +99,17 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     jl_value_t *v;
     jl_taggedvalue_t *v_tagged;
     
-    v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
-    // jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
-    v = jl_valueof(v_tagged);
-    obj_2_obj_size(v, osize);
-    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    if (ty != jl_buff_tag) {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+        v = jl_valueof(v_tagged);
+        post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    } else {
+        v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
+        jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+        v = jl_valueof(v_tagged_aligned);
+        store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
+        post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
+    }
 
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
@@ -332,25 +349,12 @@ void* get_obj_start_ref(jl_value_t* obj)
 {
     uintptr_t tag = (jl_value_t*)jl_typeof(obj);
     jl_datatype_t *vt = (jl_datatype_t*)tag;
-
-    void* obj_start_ref;
-
-    if (vt && jl_array_typename && (vt == jl_buff_tag || ((jl_datatype_t*)vt)->name == jl_array_typename)) {
+    void* obj_start_ref; 
+    
+    if (vt == jl_buff_tag) {
         obj_start_ref = (void*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
-        if (vt != jl_buff_tag) {
-            FILE *fp;
-            fp = fopen("/home/eduardo/mmtk-julia/get_obj_start_ref_array.log", "a");
-            fprintf(fp, "obj = %p, ty = %s, start_ref = %p\n", obj, jl_typename_str(vt), obj_start_ref);
-            fflush(fp);
-            fclose(fp);
-        }
     } else {
         obj_start_ref = (void*)((size_t)obj - sizeof(jl_taggedvalue_t));
-        // FILE *fp;
-        // fp = fopen("/home/eduardo/mmtk-julia/get_obj_start_ref_non_array.log", "a");
-        // fprintf(fp, "obj = %p, ty = %s, start_ref = %p\n", obj, jl_typename_str(vt), obj_start_ref);
-        // fflush(fp);
-        // fclose(fp);
     }
 
     return obj_start_ref;
@@ -363,23 +367,37 @@ size_t get_so_size(jl_value_t* obj)
     jl_datatype_t *vt = (jl_datatype_t*)tag;
 
     if (vt == jl_buff_tag) {
-        // size_t* size_ptr = (size_t*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
         return get_obj_size(obj);
     } else if (vt->name == jl_array_typename) {
-        // size_t* size_ptr = (size_t*)((size_t)obj - 2*sizeof(jl_taggedvalue_t));
         jl_array_t* a = (jl_array_t*) obj;
         if (a->flags.how == 0) {
-            return get_obj_size(obj);
+            int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
+            int tsz = sizeof(jl_array_t) + ndimwords*sizeof(size_t);
+            if (object_is_managed_by_mmtk(a->data)) {
+                size_t pre_data_bytes = ((size_t)a->data - a->offset*a->elsize) - (size_t)a;
+                if (pre_data_bytes > 0 && pre_data_bytes <= ARRAY_INLINE_NBYTES) {
+                    tsz = ((size_t)a->data - a->offset*a->elsize) - (size_t)a;
+                    tsz += jl_array_nbytes(a);
+                }
+            }
+
+            int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
+            int osize = jl_gc_sizeclasses[pool_id];
+
+            // if (osize != get_obj_size(obj)) {
+            //     printf("Object %p with a->flags.how == 0 has changed its buffer?\n", obj);
+            //     printf("a = %p, a->data = %p, osize = %d, actual_size = %d, nbytes = %d, a->offset = %d, a->elsize = %d\n", 
+            //             a, a->data, osize, get_obj_size(obj), jl_array_nbytes(a), a->offset, a->elsize);
+            //     fflush(stdout);
+            // }
+
+            return osize;
         } else if (a->flags.how == 1) {
             int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
             int tsz = sizeof(jl_array_t) + ndimwords*sizeof(size_t);
             int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
             int osize = jl_gc_sizeclasses[pool_id];
 
-            // if (osize != get_obj_size(obj)) {
-            //     printf("Object %p with a->flags.how == 1 has changed its buffer?\n", obj);
-            //     fflush(stdout);
-            // }
             return osize;
         } else if (a->flags.how == 2) {
             int ndimwords = jl_array_ndimwords(jl_array_ndims(a));
@@ -387,10 +405,6 @@ size_t get_so_size(jl_value_t* obj)
             int pool_id = jl_gc_szclass(tsz + sizeof(jl_taggedvalue_t));
             int osize = jl_gc_sizeclasses[pool_id];
 
-            // if (osize != get_obj_size(obj)) {
-            //     printf("Object %p with a->flags.how == 2 has changed its buffer?\n", obj);
-            //     fflush(stdout);
-            // }
             return osize;
         } else if (a->flags.how == 3) {
             int ndimwords = jl_array_ndimwords(jl_array_ndims(a));

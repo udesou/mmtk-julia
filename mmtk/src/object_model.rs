@@ -170,7 +170,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             object.to_address() - 48
         } else {
             unsafe {
-                object.to_address() - JULIA_HEADER_SIZE
+                ((*UPCALLS).get_object_start_ref)(object)
             }
         };
         res
