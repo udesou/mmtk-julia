@@ -102,6 +102,7 @@ typedef struct {
     void (* get_malloced_bytes) (void* tls);
     void (* wait_in_a_safepoint) ();
     void (* exit_from_safepoint) (int old_state);
+    void (* introspect_objects_after_copying) (void* to, void* from)
 } Julia_Upcalls;
 
 /**
@@ -122,6 +123,9 @@ extern void register_finalizer(void* obj, void* function, bool is_ptr);
 extern void run_finalizers_for_obj(void* obj);
 extern void mmtk_run_finalizers(bool at_exit);
 extern void mmtk_gc_poll(void *tls);
+extern int  mmtk_pin_object(void *obj);
+extern void mmtk_unpin_object(void *obj);
+
 
 /**
  * VM Accounting

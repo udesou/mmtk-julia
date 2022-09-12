@@ -482,15 +482,35 @@ static void jl_gc_queue_bt_buf_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_
 
 static void jl_gc_queue_thread_local_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp, jl_ptls_t ptls2)
 {
+    mallocarray_t *ma = ptls2->heap.mallocarrays;
+    mallocarray_t **pma = &ptls2->heap.mallocarrays;
+    while (ma != NULL) {
+        mallocarray_t *nxt = ma->next;
+        if (!object_is_managed_by_mmtk(ma->a)) {
+            pma = &ma->next;
+            ma = nxt;
+            continue;
+        } else { 
+            *pma = nxt;
+            mmtk_pin_object(ma->a);
+        }
+        ma = nxt;
+    }
+
+    add_object_to_mmtk_task_roots(ptls2->current_task);
     add_object_to_mmtk_roots(ptls2->current_task);
-    add_object_to_mmtk_roots(ptls2->root_task);
+    add_object_to_mmtk_task_roots(ptls2->root_task);
+    add_object_to_mmtk_roots(ptls2->current_task);
     if (ptls2->next_task) {
+        add_object_to_mmtk_task_roots(ptls2->next_task);
         add_object_to_mmtk_roots(ptls2->next_task);
     }
     if (ptls2->previous_task) {
+        add_object_to_mmtk_task_roots(ptls2->previous_task);
         add_object_to_mmtk_roots(ptls2->previous_task);
     }
     if (ptls2->previous_exception) {
+        add_object_to_mmtk_task_roots(ptls2->previous_exception);
         add_object_to_mmtk_roots(ptls2->previous_exception);
     }
 }
@@ -926,8 +946,53 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
 }
 
 
+void introspect_objects_after_copying(void* from, void* to) {
+    jl_value_t* jl_from = (jl_value_t*) from;
+    jl_value_t* jl_to = (jl_value_t*) to;
+
+    uintptr_t tag_to = (jl_value_t*)jl_typeof(jl_to);
+    uintptr_t tag_from = (jl_value_t*)jl_typeof(jl_from);
+
+    if(tag_to != tag_from) {
+        printf("TAGS ARE DIFFERENT?\n");
+        fflush(stdout);
+    }
+
+    jl_datatype_t *vt = (jl_datatype_t*)tag_to;
+    if(vt->name == jl_array_typename) {
+        jl_array_t *a = (jl_array_t*)jl_from;
+        jl_array_flags_t flags = a->flags;
+        jl_array_t *b = (jl_array_t*)jl_to;
+        jl_array_flags_t bflags = b->flags;
+        int data_is_inlined = 0;
+        if (a->flags.how == 0) {
+            if (object_is_managed_by_mmtk(a->data)) {
+                size_t pre_data_bytes = ((size_t)a->data - a->offset*a->elsize) - (size_t)a;
+                if (pre_data_bytes > 0 && pre_data_bytes <= ARRAY_INLINE_NBYTES) {
+                    // data is inlined and pointer in copied array should be updated
+                    // printf("a->data = %p, b->data = %p, a = %p, b = %p\n", a->data, b->data, a, b);
+                    // fflush(stdout);
+                    b->data = (size_t) b + pre_data_bytes;
+                    data_is_inlined = 1;
+                    // printf("a->data = %p, b->data = %p, a = %p, b = %p\n", a->data, b->data, a, b);
+                    // fflush(stdout);
+                }
+            }
+        }
+        jl_value_t* data = a->data;
+        uintptr_t tag_data = (jl_value_t*)jl_typeof(data);
+        if(tag_data != jl_buff_tag && data_is_inlined != 1 && object_is_managed_by_mmtk(a->data)) {
+            printf("Buffer isn't a buffer?");
+            fflush(stdout);
+        }
+
+
+    }
+}
+
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying
                              };
+

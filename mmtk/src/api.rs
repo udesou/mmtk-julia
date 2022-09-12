@@ -380,3 +380,13 @@ pub extern "C" fn mmtk_free_aligned(addr: Address) {
 pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
     memory_manager::gc_poll(&SINGLETON, tls);
 }
+
+#[no_mangle]
+pub extern "C" fn mmtk_pin_object(obj: ObjectReference) {
+    memory_manager::pin_object(&SINGLETON, obj);
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_unpin_object(obj: ObjectReference) {
+    memory_manager::unpin_object(&SINGLETON, obj);
+}

@@ -12,6 +12,10 @@ use mmtk::vm::*;
 
 pub struct VMObjectModel {}
 
+pub(crate) const FORWARDING_BITS_OFFSET: isize = - 64;
+
+pub(crate) const FORWARDING_POINTER_OFFSET: isize = 0;
+
 /// Global logging bit metadata spec
 /// 1 bit per object
 pub(crate) const LOGGING_SIDE_METADATA_SPEC: VMGlobalLogBitSpec =
@@ -20,11 +24,14 @@ pub(crate) const LOGGING_SIDE_METADATA_SPEC: VMGlobalLogBitSpec =
 pub(crate) const MARKING_METADATA_SPEC: VMLocalMarkBitSpec =
     VMLocalMarkBitSpec::side_after(LOS_METADATA_SPEC.as_spec());
 
-// pub(crate) const LOCAL_FORWARDING_POINTER_METADATA_SPEC: VMLocalForwardingPointerSpec =
-//     VMLocalForwardingPointerSpec::side_after(MARKING_METADATA_SPEC.as_spec());
+/// 1 word per object
+pub(crate) const FORWARDING_POINTER_METADATA_SPEC: VMLocalForwardingPointerSpec =
+    VMLocalForwardingPointerSpec::in_header(FORWARDING_POINTER_OFFSET);
 
-// pub(crate) const LOCAL_FORWARDING_METADATA_BITS_SPEC: VMLocalForwardingBitsSpec =
-//     VMLocalForwardingBitsSpec::side_after(LOCAL_FORWARDING_POINTER_METADATA_SPEC.as_spec());
+/// PolicySpecific object forwarding status metadata spec
+/// 2 bits per object
+pub(crate) const FORWARDING_BITS_METADATA_SPEC: VMLocalForwardingBitsSpec =
+    VMLocalForwardingBitsSpec::in_header(FORWARDING_BITS_OFFSET);
 
 
 pub(crate) const BI_MARKING_METADATA_SPEC: SideMetadataSpec =
@@ -52,40 +59,40 @@ pub(crate) const LOS_METADATA_SPEC: VMLocalLOSMarkNurserySpec =
 
 impl ObjectModel<JuliaVM> for VMObjectModel {
     const GLOBAL_LOG_BIT_SPEC: VMGlobalLogBitSpec = LOGGING_SIDE_METADATA_SPEC;
-    const LOCAL_FORWARDING_POINTER_SPEC: VMLocalForwardingPointerSpec = VMLocalForwardingPointerSpec::in_header(0);
-    const LOCAL_FORWARDING_BITS_SPEC: VMLocalForwardingBitsSpec = VMLocalForwardingBitsSpec::in_header(0);
+    const LOCAL_FORWARDING_POINTER_SPEC: VMLocalForwardingPointerSpec = FORWARDING_POINTER_METADATA_SPEC;
+    const LOCAL_FORWARDING_BITS_SPEC: VMLocalForwardingBitsSpec = FORWARDING_BITS_METADATA_SPEC;
     const LOCAL_MARK_BIT_SPEC: VMLocalMarkBitSpec = MARKING_METADATA_SPEC;
     const LOCAL_LOS_MARK_NURSERY_SPEC: VMLocalLOSMarkNurserySpec = LOS_METADATA_SPEC;
     
     fn load_metadata(
-        _metadata_spec: &HeaderMetadataSpec,
-        _object: ObjectReference,
-        _mask: Option<usize>,
-        _atomic_ordering: Option<Ordering>,
+        metadata_spec: &HeaderMetadataSpec,
+        object: ObjectReference,
+        mask: Option<usize>,
+        atomic_ordering: Option<Ordering>,
     ) -> usize {
-        unimplemented!()
+        mmtk::util::metadata::header_metadata::load_metadata(metadata_spec, object, mask, atomic_ordering)
     }
 
     fn store_metadata(
-        _metadata_spec: &HeaderMetadataSpec,
-        _object: ObjectReference,
-        _val: usize,
-        _mask: Option<usize>,
-        _atomic_ordering: Option<Ordering>,
+        metadata_spec: &HeaderMetadataSpec,
+        object: ObjectReference,
+        val: usize,
+        mask: Option<usize>,
+        atomic_ordering: Option<Ordering>,
     ) {
-        unimplemented!()
+        mmtk::util::metadata::header_metadata::store_metadata(metadata_spec, object, val, mask, atomic_ordering)
     }
 
     fn compare_exchange_metadata(
-        _metadata_spec: &HeaderMetadataSpec,
-        _object: ObjectReference,
-        _old_val: usize,
-        _new_val: usize,
-        _mask: Option<usize>,
-        _success_order: Ordering,
-        _failure_order: Ordering,
+        metadata_spec: &HeaderMetadataSpec,
+        object: ObjectReference,
+        old_val: usize,
+        new_val: usize,
+        mask: Option<usize>,
+        success_order: Ordering,
+        failure_order: Ordering,
     ) -> bool {
-        unimplemented!()
+        mmtk::util::metadata::header_metadata::compare_exchange_metadata(metadata_spec, object, old_val, new_val, mask, success_order, failure_order)
     }
 
     fn fetch_add_metadata(
@@ -107,11 +114,50 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 
     fn copy(
-        _from: ObjectReference,
-        _semantics: CopySemantics,
-        _copy_context: &mut GCWorkerCopyContext<JuliaVM>,
+        from: ObjectReference,
+        semantics: CopySemantics,
+        copy_context: &mut GCWorkerCopyContext<JuliaVM>,
     ) -> ObjectReference {
-        unimplemented!()
+        let bytes = Self::get_current_size(from);
+        let from_start_ref = unsafe { Self::object_start_ref(from).to_object_reference() };
+        let header_offset = from.to_address().as_usize() - from_start_ref.to_address().as_usize();
+
+        let dst =
+        if header_offset == 8 {
+            // regular object
+            copy_context.alloc_copy( from_start_ref, bytes, 16, 8, semantics)
+        } else if header_offset == 16 {
+            unimplemented!();
+            // buffer
+            // copy_context.alloc_copy( from_start_ref, bytes, 16, 0, semantics)
+        } else {
+            unimplemented!()
+        };
+
+        let src = Self::object_start_ref(from);
+        unsafe { std::ptr::copy_nonoverlapping::<u8>(src.to_ptr(), dst.to_mut_ptr(), bytes); }
+        let to_obj = unsafe { (dst + header_offset).to_object_reference() };
+        copy_context.post_copy(to_obj, bytes, semantics);
+
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        // let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/copied_objs.log")
+        //         .unwrap();
+
+        // if let Err(e) = writeln!(file, "copied object from {} to {}", from, to_obj) {
+        //         eprintln!("Couldn't write to file: {}", e);
+        // }
+
+        unsafe {
+            ((*UPCALLS).introspect_objects_after_copying)(from.to_address(), to_obj.to_address())
+        }
+
+        to_obj
     }
 
     fn copy_to(_from: ObjectReference, _to: ObjectReference, _region: Address) -> Address {

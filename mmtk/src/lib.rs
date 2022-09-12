@@ -14,6 +14,7 @@ use mmtk::util::ObjectReference;
 use mmtk::Mutator;
 use mmtk::vm::EdgeVisitor;
 
+use std::ops::Add;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
@@ -102,6 +103,9 @@ lazy_static! {
     pub static ref ROOTS: Mutex<HashSet<Address>> = {
         Mutex::new(HashSet::new())
     };
+    pub static ref TASK_ROOTS: Mutex<HashSet<Address>> = {
+        Mutex::new(HashSet::new())
+    };
     pub static ref MUTATOR_TLS: RwLock<HashSet<String>> =
         RwLock::new(HashSet::new());
     pub static ref MUTATORS: RwLock<Vec<ObjectReference>> =
@@ -152,6 +156,7 @@ pub struct Julia_Upcalls {
     pub sweep_malloced_array: extern "C" fn (),
     pub wait_in_a_safepoint: extern "C" fn () -> usize,
     pub exit_from_safepoint: extern "C" fn (old_state: usize),
+    pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

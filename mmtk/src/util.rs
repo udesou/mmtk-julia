@@ -1,4 +1,5 @@
 
+use crate::TASK_ROOTS;
 use crate::api::{start_control_collector, start_worker};
 use mmtk::util::opaque_pointer::*;
 use crate::JuliaVM;
@@ -61,6 +62,12 @@ pub extern "C" fn start_spawned_controller_thread(tls: VMWorkerThread, ctx: *mut
 pub extern "C" fn add_object_to_mmtk_roots(addr: Address) {
     // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
     ROOTS.lock().unwrap().insert(addr);
+}
+
+#[no_mangle]
+pub extern "C" fn add_object_to_mmtk_task_roots(addr: Address) {
+    // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
+    TASK_ROOTS.lock().unwrap().insert(addr);
 }
 
 #[inline(always)]

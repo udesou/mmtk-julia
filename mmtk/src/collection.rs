@@ -57,6 +57,20 @@ impl Collection<JuliaVM> for VMCollection {
 
         info!("Live bytes = {}, free bytes = {}, total bytes = {}", crate::api::used_bytes(), crate::api::free_bytes(), crate::api::total_bytes());
         trace!("Resuming mutators.");
+
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open("/home/eduardo/mmtk-julia/scanned_objs.log")
+                .unwrap();
+
+        if let Err(e) = writeln!(file, "\n\n\n\n\n\n\n\n FINISHED COLLECTION \n\n\n\n\n\n\n\n") {
+                eprintln!("Couldn't write to file: {}", e);
+        }
     }
 
     fn block_for_gc(tls: VMMutatorThread) {

@@ -6,6 +6,14 @@ use mmtk::vm::RootsWorkFactory;
 use mmtk::util::ObjectReference;
 use mmtk::util::opaque_pointer::*;
 use mmtk::scheduler::*;
+use crate::TASK_ROOTS;
+use crate::api::mmtk_pin_object;
+use crate::julia_scanning::jl_task_type;
+use crate::julia_scanning::mmtk_jl_typeof;
+use crate::julia_scanning::read_stack;
+use crate::julia_types::mmtk_jl_datatype_t;
+use crate::julia_types::mmtk_jl_gcframe_t;
+use crate::julia_types::mmtk_jl_task_t;
 use crate::{SINGLETON, ROOTS, UPCALLS};
 use crate::object_model::BI_MARKING_METADATA_SPEC;
 use mmtk::util::Address;
@@ -19,6 +27,7 @@ use crate::julia_scanning::process_edge;
 use crate::julia_scanning::process_offset_edge;
 
 use log::info;
+use std::ops::Add;
 use std::sync::MutexGuard;
 use std::collections::{HashSet};
 use std::sync::atomic::Ordering;
@@ -36,6 +45,11 @@ impl Scanning<JuliaVM> for VMScanning {
         unimplemented!()
     }
     fn scan_vm_specific_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<JuliaVMEdge>) {
+        let mut task_roots: MutexGuard<HashSet<Address>> = TASK_ROOTS.lock().unwrap();
+        info!("{} task roots", task_roots.len());
+
+        collect_thread_roots(task_roots);
+
         let mut roots: MutexGuard<HashSet<Address>> = ROOTS.lock().unwrap();
         info!("{} thread roots", roots.len());
 
@@ -43,7 +57,10 @@ impl Scanning<JuliaVM> for VMScanning {
 
         // roots may contain mmtk objects
         for obj in roots.drain() {
-            roots_to_scan.push(unsafe {obj.to_object_reference()} );          
+            roots_to_scan.push(unsafe {obj.to_object_reference()} );
+            if object_is_managed_by_mmtk(obj.as_usize()) {
+                memory_manager::pin_object(&SINGLETON, unsafe { obj.to_object_reference() });  
+            }
         }
 
         factory.create_process_node_roots_work(roots_to_scan);
@@ -62,6 +79,72 @@ impl Scanning<JuliaVM> for VMScanning {
     }
 
     fn prepare_for_roots_re_scanning() { unimplemented!() }
+}
+
+pub fn collect_thread_roots(task_objects: MutexGuard<HashSet<Address>>) {
+    for obj in task_objects.iter() {
+        unsafe {
+            collect_thread_roots_from_task(*obj);
+        }
+    }
+}
+
+pub unsafe fn collect_thread_roots_from_task(obj : Address) {
+    let obj_type_addr = mmtk_jl_typeof(obj);
+    let obj_type = obj_type_addr.to_ptr::<mmtk_jl_datatype_t>();
+
+    let obj_addr = obj;
+    assert_eq!(obj_type, jl_task_type);
+    let ta = obj_addr.to_ptr::<mmtk_jl_task_t>();
+    let stkbuf = (*ta).stkbuf;
+    let stkbuf_addr = Address::from_mut_ptr(stkbuf);
+    let copy_stack = (*ta).copy_stack();
+
+    let mut s = (*ta).gcstack;
+    
+    let (mut offset, mut lb, mut ub) = (0, 0, usize::MAX);
+    // FIXME: the code below is executed COPY_STACKS has been defined in the C Julia implementation - it is on by default
+    if !stkbuf_addr.is_zero() && copy_stack != 0 && (*ta).ptls != std::ptr::null_mut() {
+        if (*ta).tid < 0 {
+            panic!("tid must be positive.")
+        }
+        let stackbase = ((*UPCALLS).get_stackbase)((*ta).tid);
+        ub = stackbase;
+        lb = ub - (*ta).copy_stack() as usize;
+        offset = Address::from_mut_ptr(stkbuf).as_usize() - lb as usize;
+    }
+    if s != std::ptr::null_mut() {
+        let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
+        let nroots_addr = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub);
+        let mut nroots = nroots_addr.load::<usize>();
+        let mut nr = nroots >> 2;
+
+        loop {
+            let rts = Address::from_mut_ptr(s) + 2 * std::mem::size_of::<Address>() as usize;                
+            for i in 0..nr {
+                if (nroots & 1) != 0 {
+                    let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
+                    let real_addr = read_stack(slot.load::<Address>(), offset, lb, ub);
+                    let internal_obj: ObjectReference = real_addr.load() ;
+                    mmtk_pin_object(internal_obj);
+                } else {
+                    let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
+                    let internal_obj: ObjectReference = slot.load() ;
+                    mmtk_pin_object(internal_obj);
+                }
+            }
+
+            let new_s = read_stack(Address::from_mut_ptr((*s).prev), offset, lb, ub);
+            s = new_s.to_mut_ptr::<mmtk_jl_gcframe_t>();
+            if s != std::ptr::null_mut() {
+                let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
+                nroots = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub).load();
+                nr = nroots >> 2;
+                continue;
+            }
+            break;
+        }
+    }
 }
 
 pub fn process_object(object: ObjectReference, closure: &mut dyn EdgeVisitor<JuliaVMEdge>) {

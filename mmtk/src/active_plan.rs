@@ -23,7 +23,7 @@ impl ActivePlan<JuliaVM> for VMActivePlan {
         let tls_str = format!("{:?}", tls);
         let is_mutator = MUTATOR_TLS.read().unwrap().contains(&tls_str);
         if !is_mutator { 
-            println!("Is the tls {:?} a mutator? {}", tls_str, is_mutator);
+            log::warn!("Is the tls {:?} a mutator? {}", tls_str, is_mutator);
         }
         is_mutator
     }
