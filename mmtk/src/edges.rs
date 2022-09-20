@@ -9,6 +9,7 @@ use mmtk::{
 pub enum JuliaVMEdge {
     Simple(SimpleEdge),
     Offset(OffsetEdge),
+    Masked(MaskedEdge),
 }
 
 unsafe impl Send for JuliaVMEdge {}
@@ -18,6 +19,7 @@ impl Edge for JuliaVMEdge {
         match self {
             JuliaVMEdge::Simple(e) => e.load(),
             JuliaVMEdge::Offset(e) => e.load(),
+            JuliaVMEdge::Masked(e) => e.load(),
         }
     }
 
@@ -25,6 +27,7 @@ impl Edge for JuliaVMEdge {
         match self {
             JuliaVMEdge::Simple(e) => e.store(object),
             JuliaVMEdge::Offset(e) => e.store(object),
+            JuliaVMEdge::Masked(e) => e.store(object),
         }
     }
 }
@@ -72,5 +75,47 @@ impl Edge for OffsetEdge {
         let begin = object.to_address();
         let middle = begin + self.offset;
         unsafe { (*self.slot_addr).store(middle, atomic::Ordering::Relaxed) }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MaskedEdge {
+    slot_addr: *mut Atomic<Address>,
+    mask:  usize,
+}
+
+unsafe impl Send for MaskedEdge {}
+
+impl MaskedEdge {
+    pub fn new(address: Address) -> Self {
+        Self {
+            slot_addr: address.to_mut_ptr(),
+            mask: 3,
+        }
+    }
+
+    pub fn slot_address(&self) -> Address {
+        Address::from_mut_ptr(self.slot_addr)
+    }
+
+    pub fn mask(&self) -> usize {
+        self.mask
+    }
+}
+
+impl Edge for MaskedEdge {
+    fn load(&self) -> ObjectReference {
+        let masked_obj = unsafe { (*self.slot_addr).load(atomic::Ordering::Relaxed) };
+        let obj = masked_obj.as_usize() & !self.mask;
+        unsafe { Address::from_usize(obj).to_object_reference() }
+    }
+
+    //FIXME how to implement this?
+    fn store(&self, object: ObjectReference) {
+        let masked_obj = unsafe { (*self.slot_addr).load(atomic::Ordering::Relaxed) };
+        let tag = masked_obj.as_usize() & self.mask;
+
+        let obj = object.to_address().as_usize() | tag;
+        unsafe { (*self.slot_addr).store(Address::from_usize(obj), atomic::Ordering::Relaxed) }
     }
 }

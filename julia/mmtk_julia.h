@@ -35,4 +35,4 @@ void mmtk_jl_gc_run_all_finalizers();
 
 void mmtk_jl_run_finalizers(jl_ptls_t tls);
 
-JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, ProcessEdgeFn process_edge, ProcessOffsetEdgeFn process_offset_edge);
+JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, ProcessEdgeFn process_edge, ProcessOffsetEdgeFn process_offset_edge, ProcessMaskedEdgeFn process_masked_edge);

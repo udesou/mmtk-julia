@@ -10,6 +10,7 @@ use crate::TASK_ROOTS;
 use crate::api::mmtk_pin_object;
 use crate::julia_scanning::jl_task_type;
 use crate::julia_scanning::mmtk_jl_typeof;
+use crate::julia_scanning::process_masked_edge;
 use crate::julia_scanning::read_stack;
 use crate::julia_types::mmtk_jl_datatype_t;
 use crate::julia_types::mmtk_jl_gcframe_t;
@@ -27,7 +28,6 @@ use crate::julia_scanning::process_edge;
 use crate::julia_scanning::process_offset_edge;
 
 use log::info;
-use std::ops::Add;
 use std::sync::MutexGuard;
 use std::collections::{HashSet};
 use std::sync::atomic::Ordering;
@@ -45,7 +45,7 @@ impl Scanning<JuliaVM> for VMScanning {
         unimplemented!()
     }
     fn scan_vm_specific_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<JuliaVMEdge>) {
-        let mut task_roots: MutexGuard<HashSet<Address>> = TASK_ROOTS.lock().unwrap();
+        let task_roots: MutexGuard<HashSet<Address>> = TASK_ROOTS.lock().unwrap();
         info!("{} task roots", task_roots.len());
 
         collect_thread_roots(task_roots);
@@ -55,8 +55,23 @@ impl Scanning<JuliaVM> for VMScanning {
 
         let mut roots_to_scan = vec![];
 
+        // use std::fs::OpenOptions;
+        // use std::io::Write;
+
+        // let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/root_objs.log")
+        //         .unwrap();
+
+        
+
         // roots may contain mmtk objects
         for obj in roots.drain() {
+            // if let Err(e) = writeln!(file, "root = {}", obj) {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
             roots_to_scan.push(unsafe {obj.to_object_reference()} );
             if object_is_managed_by_mmtk(obj.as_usize()) {
                 memory_manager::pin_object(&SINGLETON, unsafe { obj.to_object_reference() });  
@@ -81,10 +96,10 @@ impl Scanning<JuliaVM> for VMScanning {
     fn prepare_for_roots_re_scanning() { unimplemented!() }
 }
 
-pub fn collect_thread_roots(task_objects: MutexGuard<HashSet<Address>>) {
-    for obj in task_objects.iter() {
+pub fn collect_thread_roots(mut task_objects: MutexGuard<HashSet<Address>>) {
+    for obj in task_objects.drain() {
         unsafe {
-            collect_thread_roots_from_task(*obj);
+            collect_thread_roots_from_task(obj);
         }
     }
 }
@@ -126,11 +141,45 @@ pub unsafe fn collect_thread_roots_from_task(obj : Address) {
                     let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
                     let real_addr = read_stack(slot.load::<Address>(), offset, lb, ub);
                     let internal_obj: ObjectReference = real_addr.load() ;
-                    mmtk_pin_object(internal_obj);
+
+                    // use std::fs::OpenOptions;
+                    // use std::io::Write;
+
+                    // let mut file = OpenOptions::new()
+                    //         .write(true)
+                    //         .append(true)
+                    //         .create(true)
+                    //         .open("/home/eduardo/mmtk-julia/stackroot_objs.log")
+                    //         .unwrap();
+                    
+                    // if let Err(e) = writeln!(file, "root = {}", internal_obj) {
+                    //     eprintln!("Couldn't write to file: {}", e);
+                    // }
+
+                    if object_is_managed_by_mmtk(internal_obj.to_address().as_usize()) {
+                        mmtk_pin_object(internal_obj);
+                    }
                 } else {
                     let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
                     let internal_obj: ObjectReference = slot.load() ;
-                    mmtk_pin_object(internal_obj);
+
+                    // use std::fs::OpenOptions;
+                    // use std::io::Write;
+
+                    // let mut file = OpenOptions::new()
+                    //         .write(true)
+                    //         .append(true)
+                    //         .create(true)
+                    //         .open("/home/eduardo/mmtk-julia/stackroot_objs.log")
+                    //         .unwrap();
+
+                    // if let Err(e) = writeln!(file, "root = {}", internal_obj) {
+                    //     eprintln!("Couldn't write to file: {}", e);
+                    // }
+        
+                    if object_is_managed_by_mmtk(internal_obj.to_address().as_usize()) {
+                        mmtk_pin_object(internal_obj);
+                    }
                 }
             }
 
@@ -153,7 +202,7 @@ pub fn process_object(object: ObjectReference, closure: &mut dyn EdgeVisitor<Jul
     #[cfg(feature = "scan_obj_c")]
     {
         unsafe {
-            ((*UPCALLS).scan_julia_obj)(addr, closure, process_edge as _, process_offset_edge as _)
+            ((*UPCALLS).scan_julia_obj)(addr, closure, process_edge as _, process_offset_edge as _, process_masked_edge as _)
         };
     }
 

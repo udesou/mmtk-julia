@@ -105,7 +105,9 @@ pub extern "C" fn destroy_mutator(mutator: *mut Mutator<JuliaVM>) {
 #[no_mangle]
 pub extern "C" fn alloc(mutator: *mut Mutator<JuliaVM>, size: usize,
                     align: usize, offset: isize, semantics: AllocationSemantics) -> Address {
-    memory_manager::alloc::<JuliaVM>(unsafe { &mut *mutator }, size, align, offset, semantics)
+                        let res = 
+    memory_manager::alloc::<JuliaVM>(unsafe { &mut *mutator }, size, align, offset, semantics);
+    res
 }   
 
 #[no_mangle]

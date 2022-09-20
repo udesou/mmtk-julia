@@ -14,7 +14,7 @@ pub struct VMObjectModel {}
 
 pub(crate) const FORWARDING_BITS_OFFSET: isize = - 64;
 
-pub(crate) const FORWARDING_POINTER_OFFSET: isize = 0;
+pub(crate) const FORWARDING_POINTER_OFFSET: isize = - 64 ;
 
 /// Global logging bit metadata spec
 /// 1 bit per object
@@ -139,8 +139,8 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         let to_obj = unsafe { (dst + header_offset).to_object_reference() };
         copy_context.post_copy(to_obj, bytes, semantics);
 
-        use std::fs::OpenOptions;
-        use std::io::Write;
+        // use std::fs::OpenOptions;
+        // use std::io::Write;
 
         // let mut file = OpenOptions::new()
         //         .write(true)

@@ -17,6 +17,272 @@ extern jl_typename_t *jl_array_typename JL_GLOBALLY_ROOTED;
 extern void jl_gc_premark(jl_ptls_t ptls2);
 extern uint64_t finalizer_rngState[4];
 
+// from julia.h
+
+extern JL_DLLIMPORT jl_datatype_t *jl_typeofbottom_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_datatype_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uniontype_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_unionall_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_tvar_type JL_GLOBALLY_ROOTED;
+
+extern JL_DLLIMPORT jl_datatype_t *jl_any_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_type_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_typename_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_type_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_symbol_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_ssavalue_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_abstractslot_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_slotnumber_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_typedslot_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_argument_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_const_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_partial_struct_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_partial_opaque_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_interconditional_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_method_match_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_simplevector_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_tuple_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_vecelement_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_anytuple_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_emptytuple_type JL_GLOBALLY_ROOTED;
+#define jl_tuple_type jl_anytuple_type
+extern JL_DLLIMPORT jl_unionall_t *jl_anytuple_type_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_vararg_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_function_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_builtin_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_opaque_closure_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_opaque_closure_typename JL_GLOBALLY_ROOTED;
+
+extern JL_DLLIMPORT jl_value_t *jl_bottom_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_method_instance_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_code_instance_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_code_info_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_method_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_module_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_abstractarray_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_densearray_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_array_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_array_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_weakref_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_abstractstring_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_string_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_errorexception_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_argumenterror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_loaderror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_initerror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_typeerror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_methoderror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_undefvarerror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_atomicerror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_lineinfonode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_stackovf_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_memory_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_readonlymemory_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_diverror_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_undefref_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_interrupt_exception JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_boundserror_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_an_empty_vec_any JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_an_empty_string JL_GLOBALLY_ROOTED;
+
+extern JL_DLLIMPORT jl_datatype_t *jl_bool_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_char_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_int8_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uint8_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_int16_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uint16_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_int32_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uint32_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_int64_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uint64_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_float16_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_float32_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_float64_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_floatingpoint_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_number_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_void_type JL_GLOBALLY_ROOTED;  // deprecated
+extern JL_DLLIMPORT jl_datatype_t *jl_nothing_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_signed_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_voidpointer_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_uint8pointer_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_pointer_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_llvmpointer_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_ref_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_pointer_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_llvmpointer_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_typename_t *jl_namedtuple_typename JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_unionall_t *jl_namedtuple_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_task_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_pair_type JL_GLOBALLY_ROOTED;
+
+extern JL_DLLIMPORT jl_value_t *jl_array_uint8_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_array_any_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_array_symbol_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_array_int32_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_array_uint64_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_expr_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_globalref_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_linenumbernode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_gotonode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_gotoifnot_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_returnnode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_phinode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_pinode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_phicnode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_upsilonnode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_quotenode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_newvarnode_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_intrinsic_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_methtable_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_typemap_level_type JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_datatype_t *jl_typemap_entry_type JL_GLOBALLY_ROOTED;
+
+extern JL_DLLIMPORT jl_svec_t *jl_emptysvec JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_emptytuple JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_true JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_false JL_GLOBALLY_ROOTED;
+extern JL_DLLIMPORT jl_value_t *jl_nothing JL_GLOBALLY_ROOTED;
+
+JL_DLLEXPORT void import_global_roots() {
+    adding_mmtk_object_as_root(jl_typeofbottom_type);
+    adding_mmtk_object_as_root(jl_datatype_type);
+    adding_mmtk_object_as_root(jl_uniontype_type);
+    adding_mmtk_object_as_root(jl_unionall_type);
+    adding_mmtk_object_as_root(jl_tvar_type);
+    adding_mmtk_object_as_root(jl_any_type);
+    adding_mmtk_object_as_root(jl_type_type);
+    adding_mmtk_object_as_root(jl_typename_type);
+    adding_mmtk_object_as_root(jl_type_typename);
+    adding_mmtk_object_as_root(jl_symbol_type);
+    adding_mmtk_object_as_root(jl_ssavalue_type);
+    adding_mmtk_object_as_root(jl_abstractslot_type);
+    adding_mmtk_object_as_root(jl_slotnumber_type);
+    adding_mmtk_object_as_root(jl_typedslot_type);
+    adding_mmtk_object_as_root(jl_argument_type);
+    adding_mmtk_object_as_root(jl_const_type);
+    adding_mmtk_object_as_root(jl_partial_struct_type);
+    adding_mmtk_object_as_root(jl_partial_opaque_type);
+    adding_mmtk_object_as_root(jl_interconditional_type);
+    adding_mmtk_object_as_root(jl_method_match_type);
+    adding_mmtk_object_as_root(jl_simplevector_type);
+    adding_mmtk_object_as_root(jl_tuple_typename);
+    adding_mmtk_object_as_root(jl_vecelement_typename);
+    adding_mmtk_object_as_root(jl_anytuple_type);
+    adding_mmtk_object_as_root(jl_emptytuple_type);
+    adding_mmtk_object_as_root(jl_anytuple_type_type);
+    adding_mmtk_object_as_root(jl_vararg_type);
+    adding_mmtk_object_as_root(jl_function_type);
+    adding_mmtk_object_as_root(jl_builtin_type);
+    adding_mmtk_object_as_root(jl_opaque_closure_type);
+    adding_mmtk_object_as_root(jl_opaque_closure_typename);
+    adding_mmtk_object_as_root(jl_bottom_type);
+    adding_mmtk_object_as_root(jl_method_instance_type);
+    adding_mmtk_object_as_root(jl_code_instance_type);
+    adding_mmtk_object_as_root(jl_code_info_type);
+    adding_mmtk_object_as_root(jl_method_type);
+    adding_mmtk_object_as_root(jl_module_type);
+    adding_mmtk_object_as_root(jl_abstractarray_type);
+    adding_mmtk_object_as_root(jl_densearray_type);
+    adding_mmtk_object_as_root(jl_array_type);
+    adding_mmtk_object_as_root(jl_array_typename);
+    adding_mmtk_object_as_root(jl_weakref_type);
+    adding_mmtk_object_as_root(jl_abstractstring_type);
+    adding_mmtk_object_as_root(jl_string_type);
+    adding_mmtk_object_as_root(jl_errorexception_type);
+    adding_mmtk_object_as_root(jl_argumenterror_type);
+    adding_mmtk_object_as_root(jl_loaderror_type);
+    adding_mmtk_object_as_root(jl_initerror_type);
+    adding_mmtk_object_as_root(jl_typeerror_type);
+    adding_mmtk_object_as_root(jl_methoderror_type);
+    adding_mmtk_object_as_root(jl_undefvarerror_type);
+    adding_mmtk_object_as_root(jl_atomicerror_type);
+    adding_mmtk_object_as_root(jl_lineinfonode_type);
+    adding_mmtk_object_as_root(jl_stackovf_exception);
+    adding_mmtk_object_as_root(jl_memory_exception);
+    adding_mmtk_object_as_root(jl_readonlymemory_exception);
+    adding_mmtk_object_as_root(jl_diverror_exception);
+    adding_mmtk_object_as_root(jl_undefref_exception);
+    adding_mmtk_object_as_root(jl_interrupt_exception);
+    adding_mmtk_object_as_root(jl_boundserror_type);
+    adding_mmtk_object_as_root(jl_an_empty_vec_any);
+    adding_mmtk_object_as_root(jl_an_empty_string);
+    adding_mmtk_object_as_root(jl_bool_type);
+    adding_mmtk_object_as_root(jl_char_type);
+    adding_mmtk_object_as_root(jl_int8_type);
+    adding_mmtk_object_as_root(jl_uint8_type);
+    adding_mmtk_object_as_root(jl_int16_type);
+    adding_mmtk_object_as_root(jl_uint16_type);
+    adding_mmtk_object_as_root(jl_int32_type);
+    adding_mmtk_object_as_root(jl_uint32_type);
+    adding_mmtk_object_as_root(jl_int64_type);
+    adding_mmtk_object_as_root(jl_uint64_type);
+    adding_mmtk_object_as_root(jl_float16_type);
+    adding_mmtk_object_as_root(jl_float32_type);
+    adding_mmtk_object_as_root(jl_float64_type);
+    adding_mmtk_object_as_root(jl_floatingpoint_type);
+    adding_mmtk_object_as_root(jl_number_type);
+    adding_mmtk_object_as_root(jl_void_type);
+    adding_mmtk_object_as_root(jl_nothing_type);
+    adding_mmtk_object_as_root(jl_signed_type);
+    adding_mmtk_object_as_root(jl_voidpointer_type);
+    adding_mmtk_object_as_root(jl_uint8pointer_type);
+    adding_mmtk_object_as_root(jl_pointer_type);
+    adding_mmtk_object_as_root(jl_llvmpointer_type);
+    adding_mmtk_object_as_root(jl_ref_type);
+    adding_mmtk_object_as_root(jl_pointer_typename);
+    adding_mmtk_object_as_root(jl_llvmpointer_typename);
+    adding_mmtk_object_as_root(jl_namedtuple_typename);
+    adding_mmtk_object_as_root(jl_namedtuple_type);
+    adding_mmtk_object_as_root(jl_task_type);
+    adding_mmtk_object_as_root(jl_pair_type);
+    adding_mmtk_object_as_root(jl_array_uint8_type);
+    adding_mmtk_object_as_root(jl_array_any_type);
+    adding_mmtk_object_as_root(jl_array_symbol_type);
+    adding_mmtk_object_as_root(jl_array_int32_type);
+    adding_mmtk_object_as_root(jl_array_uint64_type);
+    adding_mmtk_object_as_root(jl_expr_type);
+    adding_mmtk_object_as_root(jl_globalref_type);
+    adding_mmtk_object_as_root(jl_linenumbernode_type);
+    adding_mmtk_object_as_root(jl_gotonode_type);
+    adding_mmtk_object_as_root(jl_gotoifnot_type);
+    adding_mmtk_object_as_root(jl_returnnode_type);
+    adding_mmtk_object_as_root(jl_phinode_type);
+    adding_mmtk_object_as_root(jl_pinode_type);
+    adding_mmtk_object_as_root(jl_phicnode_type);
+    adding_mmtk_object_as_root(jl_upsilonnode_type);
+    adding_mmtk_object_as_root(jl_quotenode_type);
+    adding_mmtk_object_as_root(jl_newvarnode_type);
+    adding_mmtk_object_as_root(jl_intrinsic_type);
+    adding_mmtk_object_as_root(jl_methtable_type);
+    adding_mmtk_object_as_root(jl_typemap_level_type);
+    adding_mmtk_object_as_root(jl_typemap_entry_type);
+    adding_mmtk_object_as_root(jl_emptysvec);
+    adding_mmtk_object_as_root(jl_emptytuple);
+    adding_mmtk_object_as_root(jl_true);
+    adding_mmtk_object_as_root(jl_false);
+    adding_mmtk_object_as_root(jl_nothing);
+    adding_mmtk_object_as_root(jl_main_module);
+    adding_mmtk_object_as_root(jl_core_module);
+    adding_mmtk_object_as_root(jl_base_module);
+    adding_mmtk_object_as_root(jl_top_module);
+    adding_mmtk_object_as_root(jl_all_tls_states);
+    adding_mmtk_object_as_root(cmpswap_names);
+    adding_mmtk_object_as_root(jl_type_type_mt);
+    adding_mmtk_object_as_root(jl_nonfunction_mt);
+    adding_mmtk_object_as_root(_jl_debug_method_invalidation);
+    adding_mmtk_object_as_root(jl_all_methods);
+    adding_mmtk_object_as_root(jl_module_init_order);
+    adding_mmtk_object_as_root(jl_precompile_toplevel_module);
+    adding_mmtk_object_as_root(jl_global_roots_table);
+}
+
+void adding_mmtk_object_as_root(void* obj) {
+    if (object_is_managed_by_mmtk(obj)) {
+        add_object_to_mmtk_roots(obj);
+    }
+}
+
+
 JL_DLLEXPORT void (jl_mmtk_harness_begin)(void)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -433,6 +699,8 @@ static void queue_roots(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp)
     // modules
     add_object_to_mmtk_roots(jl_main_module);
 
+    import_global_roots();
+
     // invisible builtin values
     if (jl_an_empty_vec_any != NULL)
         add_object_to_mmtk_roots(jl_an_empty_vec_any);
@@ -588,10 +856,12 @@ JL_DLLEXPORT void scan_julia_exc_obj(jl_value_t* obj, closure_pointer closure, P
     assert(vt == jl_task_type);
     jl_task_t *ta = (jl_task_t*)obj;
 
+    const char *type_name = jl_typeof_str(obj);
+
     if (ta->excstack) { // inlining label `excstack` from mark_loop
         // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
         if (object_is_managed_by_mmtk(ta->excstack)) {
-            process_edge(closure, &ta->excstack);
+            process_edge(closure, &ta->excstack, obj, type_name, vt);
         }
         jl_excstack_t *excstack = ta->excstack;
         size_t itr = ta->excstack->top;
@@ -611,7 +881,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(jl_value_t* obj, closure_pointer closure, P
                     uintptr_t nptr = 0;
                     jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                     jlval_index += 1;
-                    process_edge(closure, new_obj_edge);
+                    process_edge(closure, new_obj_edge, obj, type_name, vt);
                 }
                 jlval_index = 0;
             }
@@ -623,7 +893,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(jl_value_t* obj, closure_pointer closure, P
             itr = jl_excstack_next(excstack, itr);
             bt_index = 0;
             jlval_index = 0;
-            process_edge(closure, stack_obj_edge);
+            process_edge(closure, stack_obj_edge, obj, type_name, vt);
         }
     }
 }
@@ -648,7 +918,7 @@ JL_DLLEXPORT void* get_stackbase(int16_t tid) {
  * directly (not an edge), specifying whether to scan the object or not; and only scan the object 
  * (necessary for boot image / non-MMTk objects)
 **/
-JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, ProcessEdgeFn process_edge, ProcessOffsetEdgeFn process_offset_edge) 
+JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, ProcessEdgeFn process_edge, ProcessOffsetEdgeFn process_offset_edge, ProcessMaskedEdgeFn process_masked_edge) 
 {
     uintptr_t tag = (jl_value_t*)jl_typeof(obj);
     jl_datatype_t *vt = (jl_datatype_t*)tag; // type of obj
@@ -672,7 +942,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
         jl_value_t **objary_begin = data;
         jl_value_t **objary_end = data + l;
         for (; objary_begin < objary_end; objary_begin += 1) {
-            process_edge(closure, objary_begin);
+            process_edge(closure, objary_begin, obj, type_name, vt);
         }
     } else if (vt->name == jl_array_typename) { // scanning a jl_array_typename object
         jl_array_t *a = (jl_array_t*)obj;
@@ -686,7 +956,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             // should be processed below if it contains pointers
         } else if (flags.how == 3) { // has a pointer to the object that owns the data
             jl_value_t **owner_addr = jl_array_data_owner_addr(a);
-            process_edge(closure, owner_addr);
+            process_edge(closure, owner_addr, obj, type_name, vt);
             return;
         }
         if (a->data == NULL || jl_array_len(a) == 0) {
@@ -700,7 +970,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             jl_value_t** pnew_obj;
 
             for (; objary_begin < objary_end; objary_begin++) {
-                process_edge(closure, objary_begin);
+                process_edge(closure, objary_begin, obj, type_name, vt);
             }
         } else if (flags.hasptr) { // inlining label `objarray_loaded` from mark_loop
             jl_datatype_t *et = (jl_datatype_t*)jl_tparam0(vt);
@@ -717,7 +987,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             if (npointers == 1) { // inlining label `objarray_loaded` from mark_loop
                 objary_begin += layout->first_ptr;
                 for (; objary_begin < objary_end; objary_begin+=elsize) {
-                    process_edge(closure, objary_begin);
+                    process_edge(closure, objary_begin, obj, type_name, vt);
                 }
             } else if (layout->fielddesc_type == 0) { // inlining label `array8_loaded` from mark_loop
                 obj8_begin = (uint8_t*)jl_dt_layout_ptrs(layout);
@@ -731,7 +1001,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
                 for (; begin < end; begin += elsize) {
                     for (; elem_begin < elem_end; elem_begin++) {
                         jl_value_t **slot = &begin[*elem_begin];
-                        process_edge(closure, slot);
+                        process_edge(closure, slot, obj, type_name, vt);
                     }
                     elem_begin = obj8_begin;
                 }
@@ -753,8 +1023,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             jl_binding_t *b = *begin;
             if (b == (jl_binding_t*)HT_NOTFOUND)
                 continue;
-
-            process_edge(closure, begin);
+            process_edge(closure, begin, obj, type_name, vt);
             
             void *vb = jl_astaggedvalue(b);
             verify_parent1("module", binding->parent, &vb, "binding_buff");
@@ -762,21 +1031,19 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             jl_value_t *value = b->value;
             jl_value_t *globalref = b->globalref;
 
-            process_edge(closure, &b->value);
-            process_edge(closure, &b->globalref);
+            process_edge(closure, &b->value, obj, type_name, vt);
+            process_edge(closure, &b->globalref, obj, type_name, vt);
+            process_edge(closure, &b->owner, obj, type_name, vt);
+            process_edge(closure, &b->ty, obj, type_name, vt);
         }
         jl_module_t *parent = binding.parent;
-        process_edge(closure, &parent->parent);
+        process_edge(closure, &parent->parent, obj, type_name, vt);
 
         size_t nusings = m->usings.len;
         if (nusings) {
-            jl_value_t **objary_begin = (jl_value_t**)m->usings.items;
-            jl_value_t **objary_end = objary_begin + nusings;
-            gc_mark_objarray_t objary = {(jl_value_t*)m, objary_begin, objary_end, 1, binding.nptr};
-
-            for (; objary_begin < objary_end; objary_begin += objary.step) {
-                jl_value_t **pnew_obj = *objary_begin;
-                process_edge(closure, pnew_obj);
+            size_t i;
+            for (i = 0; i < m->usings.len; i++) {
+                process_edge(closure, &m->usings.items[i], obj, type_name, vt);
             }
         }
     } else if (vt == jl_task_type) { // scanning a jl_task_type object
@@ -785,7 +1052,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
         int16_t tid = ta->tid;
 #ifdef COPY_STACKS
         if (stkbuf && ta->copy_stack && object_is_managed_by_mmtk(ta->stkbuf))
-            process_edge(closure, &ta->stkbuf);
+            process_edge(closure, &ta->stkbuf, obj, type_name, vt);
 #endif
         jl_gcframe_t *s = ta->gcstack;
         size_t nroots;
@@ -821,12 +1088,12 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
                         void **slot = (void**)mmtk_gc_read_stack(&rts[i], offset, lb, ub);
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(slot, offset, lb, ub);
                         new_obj = *(uintptr_t*)real_addr;
-                        process_edge(closure, real_addr);
+                        process_edge(closure, real_addr, obj, type_name, vt);
                     }
                     else {
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(&rts[i], offset, lb, ub);
                         new_obj = *(uintptr_t*)real_addr;
-                        process_edge(closure, real_addr);
+                        process_edge(closure, real_addr, obj, type_name, vt);
                     }
                 }
 
@@ -846,7 +1113,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
         if (ta->excstack) { // inlining label `excstack` from mark_loop
             // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
             if (object_is_managed_by_mmtk(ta->excstack)) {
-                process_edge(closure, &ta->excstack);
+                process_edge(closure, &ta->excstack, obj, type_name, vt);
             }
             jl_excstack_t *excstack = ta->excstack;
             size_t itr = ta->excstack->top;
@@ -867,7 +1134,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
                         uintptr_t nptr = 0;
                         jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                         jlval_index += 1;
-                        process_edge(closure, new_obj_edge);
+                        process_edge(closure, new_obj_edge, obj, type_name, vt);
                     }
                     jlval_index = 0;
                 }
@@ -879,7 +1146,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
                 itr = jl_excstack_next(excstack, itr);
                 bt_index = 0;
                 jlval_index = 0;
-                process_edge(closure, stack_obj_edge);
+                process_edge(closure, stack_obj_edge, obj, type_name, vt);
             }
         }
         const jl_datatype_layout_t *layout = jl_task_type->layout; // inlining label `obj8_loaded` from mark_loop 
@@ -891,7 +1158,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
         (void)jl_assume(obj8_begin < obj8_end);
         for (; obj8_begin < obj8_end; obj8_begin++) {
             jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-            process_edge(closure, slot);
+            process_edge(closure, slot, obj, type_name, vt);
         }
     } else if (vt == jl_string_type) { // scanning a jl_string_type object
         return;
@@ -909,14 +1176,14 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             if (layout->fielddesc_type == 0) { // inlining label `obj8_loaded` from mark_loop 
                 uint8_t *obj8_begin;
                 uint8_t *obj8_end;
-
+                
                 obj8_begin = (uint8_t*)jl_dt_layout_ptrs(layout);
                 obj8_end = obj8_begin + npointers;
 
                 (void)jl_assume(obj8_begin < obj8_end);
                 for (; obj8_begin < obj8_end; obj8_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-                    process_edge(closure, slot);
+                    process_edge(closure, slot, obj, type_name, vt);
                 }
             }
             else if(layout->fielddesc_type == 1) { // inlining label `obj16_loaded` from mark_loop 
@@ -928,7 +1195,7 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
                 obj16_end = obj16_begin + npointers;
                 for (; obj16_begin < obj16_end; obj16_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj16_begin];
-                    process_edge(closure, slot);
+                    process_edge(closure, slot, obj, type_name, vt);
                 }
             }
             else if (layout->fielddesc_type == 2) {
@@ -957,6 +1224,13 @@ void introspect_objects_after_copying(void* from, void* to) {
         printf("TAGS ARE DIFFERENT?\n");
         fflush(stdout);
     }
+
+    // const char *type_name = jl_typeof_str(from);
+    // FILE *fp;
+    // fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+    // fprintf(fp, "\ttype = %s\n", type_name);
+    // fflush(fp);
+    // fclose(fp);
 
     jl_datatype_t *vt = (jl_datatype_t*)tag_to;
     if(vt->name == jl_array_typename) {

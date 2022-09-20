@@ -4,6 +4,7 @@ extern crate mmtk;
 #[macro_use]
 extern crate lazy_static;
 
+use libc::c_char;
 use mmtk::scheduler::*;
 use mmtk::util::opaque_pointer::*;
 use mmtk::vm::VMBinding;
@@ -14,7 +15,6 @@ use mmtk::util::ObjectReference;
 use mmtk::Mutator;
 use mmtk::vm::EdgeVisitor;
 
-use std::ops::Add;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
@@ -129,13 +129,15 @@ extern "C" {
     pub fn init_boot_image_metadata_info(start_aligned_down: usize, end_aligned_up: usize);
 }
 
-type ProcessEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address);
-
 type ProcessOffsetEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address, offset: usize);
+
+type ProcessEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address, ori_obj : Address, obj_type : *const c_char, t: Address);
+
+type ProcessMaskedEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address);
 
 #[repr(C)]
 pub struct Julia_Upcalls {
-    pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn) -> usize,
+    pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn, process_masked_edge: ProcessMaskedEdgeFn) -> usize,
     pub scan_julia_exc_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn),
     pub get_stackbase: extern "C" fn(tid: i16) -> usize,
     pub calculate_roots: extern "C" fn(tls: OpaquePointer) -> usize,

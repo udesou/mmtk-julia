@@ -56,25 +56,36 @@ impl Collection<JuliaVM> for VMCollection {
         }
 
         info!("Live bytes = {}, free bytes = {}, total bytes = {}", crate::api::used_bytes(), crate::api::free_bytes(), crate::api::total_bytes());
-        trace!("Resuming mutators.");
+        info!("Resuming mutators.");
 
-        use std::fs::OpenOptions;
-        use std::io::Write;
+        // use std::fs::OpenOptions;
+        // use std::io::Write;
 
-        let mut file = OpenOptions::new()
-                .write(true)
-                .append(true)
-                .create(true)
-                .open("/home/eduardo/mmtk-julia/scanned_objs.log")
-                .unwrap();
+        // let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/copied_objs.log")
+        //         .unwrap();
 
-        if let Err(e) = writeln!(file, "\n\n\n\n\n\n\n\n FINISHED COLLECTION \n\n\n\n\n\n\n\n") {
-                eprintln!("Couldn't write to file: {}", e);
-        }
+        // if let Err(e) = writeln!(file, "\n\n\n\n\n\n\n\n FINISHED COLLECTION \n\n\n\n\n\n\n\n") {
+        //         eprintln!("Couldn't write to file: {}", e);
+        // }
+
+        // let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/scanned_objs.log")
+        //         .unwrap();
+
+        // if let Err(e) = writeln!(file, "\n\n\n\n\n\n\n\n FINISHED COLLECTION \n\n\n\n\n\n\n\n") {
+        //         eprintln!("Couldn't write to file: {}", e);
+        // }
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
-        trace!("Triggered GC!");
+        info!("Triggered GC!");
         
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
