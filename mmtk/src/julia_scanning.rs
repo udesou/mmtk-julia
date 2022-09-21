@@ -287,9 +287,9 @@ pub fn process_edge(closure : &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address, 
     let simple_edge = SimpleEdge::from_address(slot);
 
     if object_is_managed_by_mmtk(internal_obj_addr.as_usize()) {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-        use std::ffi::CStr;
+        // use std::fs::OpenOptions;
+        // use std::io::Write;
+        // use std::ffi::CStr;
 
         // let mut file = OpenOptions::new()
         //         .write(true)

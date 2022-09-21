@@ -1225,12 +1225,12 @@ void introspect_objects_after_copying(void* from, void* to) {
         fflush(stdout);
     }
 
-    // const char *type_name = jl_typeof_str(from);
-    // FILE *fp;
-    // fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
-    // fprintf(fp, "\ttype = %s\n", type_name);
-    // fflush(fp);
-    // fclose(fp);
+    const char *type_name = jl_typeof_str(from);
+    FILE *fp;
+    fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+    fprintf(fp, "\ttype = %s\n", type_name);
+    fflush(fp);
+    fclose(fp);
 
     jl_datatype_t *vt = (jl_datatype_t*)tag_to;
     if(vt->name == jl_array_typename) {
@@ -1253,12 +1253,12 @@ void introspect_objects_after_copying(void* from, void* to) {
                 }
             }
         }
-        jl_value_t* data = a->data;
+        jl_value_t* data = (jl_value_t*)((size_t)a->data - a->offset*a->elsize);
         uintptr_t tag_data = (jl_value_t*)jl_typeof(data);
-        if(tag_data != jl_buff_tag && data_is_inlined != 1 && object_is_managed_by_mmtk(a->data)) {
-            printf("Buffer isn't a buffer?");
-            fflush(stdout);
-        }
+        // if(tag_data != jl_buff_tag && data_is_inlined != 1 && object_is_managed_by_mmtk(data)) {
+        //     printf("Buffer isn't a buffer? a = %p, a->data = %p, a->how = %d, a->offset = %d\n", a, a->data, a->flags.how, a->offset);
+        //     fflush(stdout);
+        // }
 
 
     }
