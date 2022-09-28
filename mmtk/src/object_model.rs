@@ -217,6 +217,18 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     fn dump_object(_object: ObjectReference) {
         unimplemented!()
     }
+
+    fn is_object_pinned(object: ObjectReference) -> bool {
+        if crate::api::mmtk_is_obj_pinned(object) {
+            return true
+        }
+
+        let check_pinned = unsafe {
+            ((*UPCALLS).check_pinned)(object)
+        };
+
+        check_pinned
+    }
 }
 
 pub fn is_object_in_los(object: &ObjectReference) -> bool {

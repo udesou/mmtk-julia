@@ -159,6 +159,7 @@ pub struct Julia_Upcalls {
     pub wait_in_a_safepoint: extern "C" fn () -> usize,
     pub exit_from_safepoint: extern "C" fn (old_state: usize),
     pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
+    pub check_pinned: extern "C" fn (obj: ObjectReference) -> bool,
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

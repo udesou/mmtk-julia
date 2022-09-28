@@ -392,3 +392,8 @@ pub extern "C" fn mmtk_pin_object(obj: ObjectReference) {
 pub extern "C" fn mmtk_unpin_object(obj: ObjectReference) {
     memory_manager::unpin_object(&SINGLETON, obj);
 }
+
+#[no_mangle]
+pub extern "C" fn mmtk_is_obj_pinned(obj: ObjectReference) -> bool {
+    memory_manager::is_object_pinned(&SINGLETON, obj)
+}

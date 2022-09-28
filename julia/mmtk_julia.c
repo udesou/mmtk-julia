@@ -1226,11 +1226,11 @@ void introspect_objects_after_copying(void* from, void* to) {
     }
 
     const char *type_name = jl_typeof_str(from);
-    FILE *fp;
-    fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
-    fprintf(fp, "\ttype = %s\n", type_name);
-    fflush(fp);
-    fclose(fp);
+    // FILE *fp;
+    // fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+    // fprintf(fp, "\ttype = %s\n", type_name);
+    // fflush(fp);
+    // fclose(fp);
 
     jl_datatype_t *vt = (jl_datatype_t*)tag_to;
     if(vt->name == jl_array_typename) {
@@ -1264,9 +1264,27 @@ void introspect_objects_after_copying(void* from, void* to) {
     }
 }
 
+int check_pinned(jl_value_t* object) {
+    uintptr_t obj_type = (jl_value_t*)jl_typeof(object);
+    if(obj_type == 0) {
+        return 0;
+    }
+    const char *type_name = jl_typeof_str(object);
+
+    if(type_name == 0) {
+        return 0;
+    }
+
+    // if(strcmp(type_name, "Expr") == 0) {
+    //     return 1;
+    // }
+
+    return 0;
+}
+
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying, check_pinned
                              };
 
