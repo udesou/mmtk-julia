@@ -13,6 +13,7 @@ use mmtk::util::Address;
 use mmtk::util::ObjectReference;
 use mmtk::Mutator;
 use mmtk::vm::EdgeVisitor;
+use mmtk::vm::edge_shape;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{HashMap, HashSet};
@@ -48,6 +49,7 @@ impl VMBinding for JuliaVM {
     type VMCollection = collection::VMCollection;
     type VMActivePlan = active_plan::VMActivePlan;
     type VMReferenceGlue = reference_glue::VMReferenceGlue;
+    type VMMemorySlice = edge_shape::UnimplementedMemorySlice<JuliaVMEdge>;
     type VMEdge = JuliaVMEdge;
 }
 

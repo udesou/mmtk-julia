@@ -11,7 +11,6 @@ use crate::object_model::BI_MARKING_METADATA_SPEC;
 use mmtk::util::Address;
 use mmtk::MMTK;
 use mmtk::vm::VMBinding;
-use mmtk::util::metadata::side_metadata::{load_atomic, store_atomic};
 use crate::edges::JuliaVMEdge;
 #[cfg(feature = "scan_obj_c")]
 use crate::julia_scanning::process_edge;
@@ -113,10 +112,10 @@ impl<VM:VMBinding> GCWork<VM> for SweepMallocedArrays {
 
 #[no_mangle]
 pub extern "C" fn mark_metadata_scanned(addr : Address) {
-    store_atomic(&BI_MARKING_METADATA_SPEC, addr, 1, Ordering::SeqCst );
+    BI_MARKING_METADATA_SPEC.store_atomic::<usize>(addr, 1, Ordering::SeqCst );
 }
 
 #[no_mangle]
 pub extern "C" fn check_metadata_scanned(addr : Address) -> usize {
-    load_atomic(&BI_MARKING_METADATA_SPEC, addr, Ordering::SeqCst )
+    BI_MARKING_METADATA_SPEC.load_atomic( addr, Ordering::SeqCst )
 }
