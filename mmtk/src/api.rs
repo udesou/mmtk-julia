@@ -375,8 +375,12 @@ pub extern "C" fn mmtk_free_aligned(addr: Address) {
     memory_manager::free_with_size::<JuliaVM>(&SINGLETON, addr, old_size);
 }
 
-
 #[no_mangle]
 pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
     memory_manager::gc_poll(&SINGLETON, tls);
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
+    memory_manager::pin_object(&SINGLETON, object)
 }

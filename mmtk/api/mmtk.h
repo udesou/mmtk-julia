@@ -102,6 +102,8 @@ typedef struct {
     void (* get_malloced_bytes) (void* tls);
     void (* wait_in_a_safepoint) ();
     void (* exit_from_safepoint) (int old_state);
+    void (* introspect_objects_after_copying) (void* to, void* from);
+    void (* check_pinned) (void* obj);
 } Julia_Upcalls;
 
 /**

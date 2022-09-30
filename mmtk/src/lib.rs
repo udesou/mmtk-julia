@@ -154,6 +154,7 @@ pub struct Julia_Upcalls {
     pub sweep_malloced_array: extern "C" fn (),
     pub wait_in_a_safepoint: extern "C" fn () -> usize,
     pub exit_from_safepoint: extern "C" fn (old_state: usize),
+    pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

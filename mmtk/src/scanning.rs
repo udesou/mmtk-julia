@@ -6,6 +6,7 @@ use mmtk::vm::RootsWorkFactory;
 use mmtk::util::ObjectReference;
 use mmtk::util::opaque_pointer::*;
 use mmtk::scheduler::*;
+use crate::api::mmtk_pin_object;
 use crate::{SINGLETON, ROOTS, UPCALLS};
 use crate::object_model::BI_MARKING_METADATA_SPEC;
 use mmtk::util::Address;
@@ -42,7 +43,11 @@ impl Scanning<JuliaVM> for VMScanning {
 
         // roots may contain mmtk objects
         for obj in roots.drain() {
-            roots_to_scan.push(unsafe {obj.to_object_reference()} );          
+            let obj_ref = unsafe {obj.to_object_reference()};
+            if object_is_managed_by_mmtk(obj.as_usize()) {
+                mmtk_pin_object(obj_ref);
+            }
+            roots_to_scan.push(obj_ref);          
         }
 
         factory.create_process_node_roots_work(roots_to_scan);
