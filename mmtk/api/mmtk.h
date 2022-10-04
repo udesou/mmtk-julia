@@ -19,7 +19,8 @@ typedef void* (*TraceSlotFn)(void* slot, long offset);
 typedef void* (*TraceObjFn)(void* obj, bool scan_obj);
 typedef void* (*ScanObjFn)(void* obj);
 typedef void* (*DispatchScnObjFn)(void** vec, int len, int cap, int final, closure_pointer closure);
-typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot);
+
+typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot, void* orig_obj, const char *type_name, void * vt);
 typedef void* (*ProcessOffsetEdgeFn)(closure_pointer closure, void* slot, int offset);
 
 /**
@@ -104,6 +105,7 @@ typedef struct {
     void (* exit_from_safepoint) (int old_state);
     void (* introspect_objects_after_copying) (void* to, void* from);
     void (* check_pinned) (void* obj);
+    void (* pin_check_forwarded) (void* obj);
 } Julia_Upcalls;
 
 /**

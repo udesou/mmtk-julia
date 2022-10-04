@@ -22,9 +22,9 @@ impl ActivePlan<JuliaVM> for VMActivePlan {
         // FIXME have a tls field to check whether it is a mutator tls
         let tls_str = format!("{:?}", tls);
         let is_mutator = MUTATOR_TLS.read().unwrap().contains(&tls_str);
-        if !is_mutator { 
-            println!("Is the tls {:?} a mutator? {}", tls_str, is_mutator);
-        }
+        // if !is_mutator { 
+        //     println!("Is the tls {:?} a mutator? {}", tls_str, is_mutator);
+        // }
         is_mutator
     }
 

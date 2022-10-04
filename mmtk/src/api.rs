@@ -382,5 +382,11 @@ pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
 
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
+    let object_is_forwarded = unsafe {((*UPCALLS).pin_check_forwarded)(object)};
+
+    if object_is_forwarded {
+        println!("Object {} has been forwaded", object);
+    }
+
     memory_manager::pin_object(&SINGLETON, object)
 }

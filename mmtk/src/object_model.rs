@@ -82,6 +82,8 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         let to_obj = unsafe { (dst + header_offset).to_object_reference() };
         copy_context.post_copy(to_obj, bytes, semantics);
 
+        // println!("copied object {}", from);
+
         // use std::fs::OpenOptions;
         // use std::io::Write;
 
@@ -162,8 +164,11 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 
     fn is_object_pinned(object: ObjectReference) -> bool {
-        // unsafe { LOCAL_PINNING_METADATA_BITS_SPEC.load::<JuliaVM, u8>(object, None) == 1 }
-        true
+        if unsafe { LOCAL_PINNING_METADATA_BITS_SPEC.load::<JuliaVM, u8>(object, None) == 1 } {
+            return true
+        }
+
+        return unsafe {((*UPCALLS).check_pinned)(object)}
     }
 }
 

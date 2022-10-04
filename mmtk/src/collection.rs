@@ -55,11 +55,11 @@ impl Collection<JuliaVM> for VMCollection {
         }
 
         info!("Live bytes = {}, free bytes = {}, total bytes = {}", crate::api::used_bytes(), crate::api::free_bytes(), crate::api::total_bytes());
-        trace!("Resuming mutators.");
+        info!("Resuming mutators.");
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
-        trace!("Triggered GC!");
+        info!("Triggered GC!");
         
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
