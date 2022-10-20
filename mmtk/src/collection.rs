@@ -60,6 +60,20 @@ impl Collection<JuliaVM> for VMCollection {
 
     fn block_for_gc(tls: VMMutatorThread) {
         info!("Triggered GC!");
+
+        // use std::fs::OpenOptions;
+        // use std::io::Write;
+
+        // let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/scanned_objs.log")
+        //         .unwrap();
+
+        // if let Err(e) = writeln!(file, "\n {} Triggered GC!\n\n",  chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"),) {
+        //     eprintln!("Couldn't write to file: {}", e);
+        // }
         
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
@@ -120,7 +134,7 @@ impl Collection<JuliaVM> for VMCollection {
         info!("GC Done!");
 
         unsafe {
-            ((*UPCALLS).set_gc_final_state)(old_state as usize)
+            ((*UPCALLS).set_gc_final_state)(old_state)
         };
         
 

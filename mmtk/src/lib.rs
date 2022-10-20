@@ -104,6 +104,9 @@ lazy_static! {
     pub static ref ROOTS: Mutex<HashSet<Address>> = {
         Mutex::new(HashSet::new())
     };
+    pub static ref TASK_ROOTS: Mutex<HashSet<Address>> = {
+        Mutex::new(HashSet::new())
+    };
     pub static ref MUTATOR_TLS: RwLock<HashSet<String>> =
         RwLock::new(HashSet::new());
     pub static ref MUTATORS: RwLock<Vec<ObjectReference>> =
@@ -133,30 +136,29 @@ type ProcessOffsetEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<Ju
 
 #[repr(C)]
 pub struct Julia_Upcalls {
-    pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn) -> usize,
+    pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn),
     pub scan_julia_exc_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn),
-    pub get_stackbase: extern "C" fn(tid: i16) -> usize,
-    pub calculate_roots: extern "C" fn(tls: OpaquePointer) -> usize,
+    pub get_stackbase: extern "C" fn(tid: i16) -> u64,
+    pub calculate_roots: extern "C" fn(tls: OpaquePointer) -> i8,
     pub run_finalizer_function: extern "C" fn(obj: ObjectReference, function: Address, is_ptr: bool),
-    pub get_jl_last_err: extern "C" fn () -> usize,
-    pub set_jl_last_err: extern "C" fn (errno: usize),
-    pub get_lo_size: extern "C" fn (object: ObjectReference) -> usize,
-    pub get_so_size: extern "C" fn (object: ObjectReference) -> usize,
+    pub get_jl_last_err: extern "C" fn () -> u64,
+    pub set_jl_last_err: extern "C" fn (errno: u64),
+    pub get_lo_size: extern "C" fn (object: ObjectReference) -> u64,
+    pub get_so_size: extern "C" fn (object: ObjectReference) -> u64,
     pub get_object_start_ref: extern "C" fn (object: ObjectReference) -> Address,
     pub wait_for_the_world: extern "C" fn (),
-    pub set_gc_initial_state: extern "C" fn (tls: OpaquePointer) -> i64,
-    pub set_gc_final_state: extern "C" fn (old_state: usize),
-    pub set_gc_old_state: extern "C" fn (old_state: usize),
+    pub set_gc_initial_state: extern "C" fn (tls: OpaquePointer) -> i8,
+    pub set_gc_final_state: extern "C" fn (old_state: i8),
+    pub set_gc_old_state: extern "C" fn (old_state: i8),
     pub mmtk_jl_run_finalizers: extern "C" fn (tls: OpaquePointer),
     pub jl_throw_out_of_memory_error: extern "C" fn (),
     pub mark_julia_object_as_scanned: extern "C" fn (obj: Address),
-    pub julia_object_has_been_scanned: extern "C" fn (obj: Address) -> usize,
+    pub julia_object_has_been_scanned: extern "C" fn (obj: Address) -> i8,
     pub sweep_malloced_array: extern "C" fn (),
-    pub wait_in_a_safepoint: extern "C" fn () -> usize,
-    pub exit_from_safepoint: extern "C" fn (old_state: usize),
+    pub wait_in_a_safepoint: extern "C" fn () -> i8,
+    pub exit_from_safepoint: extern "C" fn (old_state: i8),
     pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
     pub check_pinned: extern "C" fn(obj: ObjectReference) -> bool,
-    pub pin_check_forwarded: extern "C" fn(obj: ObjectReference) -> bool,
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

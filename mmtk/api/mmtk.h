@@ -54,7 +54,11 @@ extern bool is_live_object(void* ref);
 extern bool is_mapped_object(void* ref);
 extern bool is_mapped_address(void* addr);
 extern void modify_check(void* ref);
-extern int object_is_managed_by_mmtk(void* addr);
+
+typedef unsigned char  byte_t;   /* 1 byte */
+extern byte_t object_is_managed_by_mmtk(void* addr);
+extern byte_t mmtk_pin_object(void* obj);
+extern bool mmtk_is_pinned(void* obj);
 
 
 

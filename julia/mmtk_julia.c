@@ -307,14 +307,9 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(int pool_offset, int osiz
     jl_value_t *v;
     jl_ptls_t ptls = jl_get_ptls_states();
 
-    ptls->mmtk_mutator_ptr->allocators.immix[0].cursor = ptls->cursor;
-
     // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
     jl_taggedvalue_t *v_tagged =
         alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
-
-    ptls->cursor = ptls->mmtk_mutator_ptr->allocators.immix[0].cursor;
-    ptls->limit = ptls->mmtk_mutator_ptr->allocators.immix[0].limit;
 
     v = jl_valueof(v_tagged);
 
@@ -323,23 +318,6 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(int pool_offset, int osiz
     ptls->gc_num.poolalloc++;
 
     return v;
-}
-
-STATIC_INLINE void* alloc_default_object(jl_ptls_t ptls, size_t size, int offset) {
-    int64_t delta = (-offset -(int64_t)(ptls->cursor)) & 15; // aligned to 16
-    uint64_t aligned_addr = ptls->cursor + delta;
-
-    if(__unlikely(aligned_addr+size > ptls->limit)) {
-        jl_ptls_t ptls2 = jl_get_ptls_states();
-        ptls2->mmtk_mutator_ptr->allocators.immix[0].cursor = ptls2->cursor;
-        void* res = alloc(ptls2->mmtk_mutator_ptr, size, 16, offset, 0);
-        ptls2->cursor = ptls2->mmtk_mutator_ptr->allocators.immix[0].cursor;
-        ptls2->limit = ptls2->mmtk_mutator_ptr->allocators.immix[0].limit;
-        return res;
-    } else {
-        ptls->cursor = aligned_addr+size;
-        return aligned_addr;
-    }
 }
 
 JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offset,
@@ -357,12 +335,13 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     jl_value_t *v;
     if (ty != jl_buff_tag) {
         // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-        jl_taggedvalue_t *v_tagged = alloc_default_object(ptls, osize, sizeof(jl_taggedvalue_t));
+        jl_taggedvalue_t *v_tagged = alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+        // alloc_default_object(ptls, osize, sizeof(jl_taggedvalue_t));
         v = jl_valueof(v_tagged);
         post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
     } else {
         // allocating an extra word to store the size of buffer objects
-        jl_taggedvalue_t *v_tagged = alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t), 0);
+        jl_taggedvalue_t *v_tagged = alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0); // alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t), 0);
         jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
         v = jl_valueof(v_tagged_aligned);
         store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
@@ -446,9 +425,9 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
 }
 
 extern void mark_metadata_scanned(jl_value_t* obj);
-extern int check_metadata_scanned(jl_value_t* obj);
+extern int8_t check_metadata_scanned(jl_value_t* obj);
 
-int object_has_been_scanned(jl_value_t* obj) 
+int8_t object_has_been_scanned(jl_value_t* obj) 
 {
     jl_taggedvalue_t *o = jl_astaggedvalue(obj);
     uintptr_t tag = (jl_value_t*)jl_typeof(obj);
@@ -481,7 +460,7 @@ void mark_object_as_scanned(jl_value_t* obj) {
     mark_metadata_scanned(obj);
 }
 
-int mmtk_wait_in_a_safepoint() {
+int8_t mmtk_wait_in_a_safepoint() {
     jl_ptls_t ptls = jl_get_ptls_states();
     int8_t old_state = ptls->gc_state;
     jl_atomic_store(&ptls->gc_state, JL_GC_STATE_WAITING);
@@ -489,7 +468,7 @@ int mmtk_wait_in_a_safepoint() {
     return old_state;
 }
 
-void mmtk_exit_from_safepoint(int old_state) {
+void mmtk_exit_from_safepoint(int8_t old_state) {
     jl_ptls_t ptls = jl_get_ptls_states();
     jl_gc_state_set(ptls, old_state, JL_GC_STATE_WAITING);
 }
@@ -498,7 +477,7 @@ void mmtk_exit_from_safepoint(int old_state) {
 // it will block until GC is done
 // that thread simply exits from block_for_gc without executing finalizers
 // when executing finalizers do not let another thread do GC (set a variable such that while that variable is true, no GC can be done)
-int set_gc_initial_state(jl_ptls_t ptls) 
+int8_t set_gc_initial_state(jl_ptls_t ptls) 
 {
     int8_t old_state = ptls->gc_state;
     jl_atomic_store(&ptls->gc_state, JL_GC_STATE_WAITING);
@@ -509,7 +488,7 @@ int set_gc_initial_state(jl_ptls_t ptls)
     return old_state;
 }
 
-void set_gc_final_state(int old_state) 
+void set_gc_final_state(int8_t old_state) 
 {
     jl_ptls_t ptls = jl_get_ptls_states();
 
@@ -517,7 +496,7 @@ void set_gc_final_state(int old_state)
     jl_gc_state_set(ptls, old_state, JL_GC_STATE_WAITING);
 }
 
-int set_gc_old_state(int old_state) 
+void set_gc_old_state(int8_t old_state) 
 {
     jl_ptls_t ptls = jl_get_ptls_states();
     jl_atomic_store_release(&ptls->gc_state, old_state);
@@ -545,18 +524,16 @@ size_t get_lo_size(bigval_t obj)
     return obj.sz;
 }
 
-void set_jl_last_err(int e) 
+void set_jl_last_err(uintptr_t e) 
 {
     jl_ptls_t ptls = jl_get_ptls_states();
     errno = e;
 }
 
-int get_jl_last_err() 
+uintptr_t get_jl_last_err() 
 {
     for (int t_i = 0; t_i < jl_n_threads; t_i++) {
         jl_ptls_t ptls = jl_all_tls_states[t_i];
-        ptls->cursor = 0;
-        ptls->limit = 0;
     }
     return errno;
 }
@@ -747,16 +724,16 @@ static void jl_gc_queue_bt_buf_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_
 
 static void jl_gc_queue_thread_local_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp, jl_ptls_t ptls2)
 {
-    add_object_to_mmtk_roots(ptls2->current_task);
-    add_object_to_mmtk_roots(ptls2->root_task);
+    add_object_to_mmtk_task_roots(ptls2->current_task);
+    add_object_to_mmtk_task_roots(ptls2->root_task);
     if (ptls2->next_task) {
-        add_object_to_mmtk_roots(ptls2->next_task);
+        add_object_to_mmtk_task_roots(ptls2->next_task);
     }
     if (ptls2->previous_task) {
-        add_object_to_mmtk_roots(ptls2->previous_task);
+        add_object_to_mmtk_task_roots(ptls2->previous_task);
     }
     if (ptls2->previous_exception) {
-        add_object_to_mmtk_roots(ptls2->previous_exception);
+        add_object_to_mmtk_task_roots(ptls2->previous_exception);
     }
 }
 
@@ -781,7 +758,7 @@ static void jl_gc_queue_remset_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_
     ptls2->heap.rem_bindings.len = 0;
 }
 
-static int calculate_roots(jl_ptls_t ptls)
+static int8_t calculate_roots(jl_ptls_t ptls)
 {
     jl_gc_mark_cache_t *gc_cache = &ptls->gc_cache;
     jl_gc_mark_sp_t sp;
@@ -880,7 +857,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(jl_value_t* obj, closure_pointer closure, P
 JL_DLLEXPORT void* get_stackbase(int16_t tid) {
     assert(tid >= 0);
     jl_ptls_t ptls2 = jl_all_tls_states[tid];
-    return ptls2->stackbase;
+    return ptls2->stackbase; 
 }
 
 /** 
@@ -933,6 +910,8 @@ JL_DLLEXPORT void scan_julia_obj(jl_value_t* obj, closure_pointer closure, Proce
             // should be processed below if it contains pointers
         } else if (flags.how == 3) { // has a pointer to the object that owns the data
             jl_value_t **owner_addr = jl_array_data_owner_addr(a);
+            long offset = (uintptr_t)a->data - (uintptr_t)*owner_addr;
+            process_offset_edge(closure, &a->data, offset);
             process_edge(closure, owner_addr, obj, type_name, vt);
             return;
         }
@@ -1238,7 +1217,7 @@ void introspect_objects_after_copying(void* from, void* to) {
     }
 }
 
-int check_pinned(jl_value_t* object) {
+bool check_pinned(jl_value_t* object) {
     uintptr_t obj_type = (jl_value_t*)jl_typeof(object);
     if(obj_type == 0) {
         return 0;
@@ -1308,22 +1287,8 @@ int check_pinned(jl_value_t* object) {
     return 0;
 }
 
-int pin_check_forwarded(jl_value_t* object) {
-    uintptr_t obj_type = (jl_value_t*)jl_typeof(object);
-
-    if(!object_is_managed_by_mmtk(object)) {
-        return 1;
-    } else {
-        if(jl_astaggedvalue(object)->bits.gc == 2 || jl_astaggedvalue(object)->bits.gc == 3) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying, check_pinned, pin_check_forwarded
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying, check_pinned
                              };

@@ -172,7 +172,7 @@ pub unsafe fn scan_julia_object(addr: Address, closure : &mut dyn EdgeVisitor<Ju
                 panic!("tid must be positive.")
             }
             let stackbase = ((*UPCALLS).get_stackbase)((*ta).tid);
-            ub = stackbase;
+            ub = stackbase as usize;
             lb = ub - (*ta).copy_stack() as usize;
             offset = Address::from_mut_ptr(stkbuf).as_usize() - lb as usize;
         }
@@ -264,7 +264,7 @@ pub unsafe fn scan_julia_object(addr: Address, closure : &mut dyn EdgeVisitor<Ju
 }
 
 #[inline(always)]
-fn read_stack(addr : Address, offset : usize, lb : usize, ub: usize) -> Address {
+pub fn read_stack(addr : Address, offset : usize, lb : usize, ub: usize) -> Address {
     if addr.as_usize() >= lb && addr.as_usize() < ub {
         return addr + offset;
     } else {
@@ -295,7 +295,7 @@ pub fn process_edge(closure : &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address, 
         //         .open("/home/eduardo/mmtk-julia/scanned_objs.log")
         //         .unwrap();
 
-        // if let Err(e) = writeln!(file, "slot = {}, obj = {}, orig_obj = {}, t_addr = {}, t = {:?}", slot, internal_obj, orig_obj, t, unsafe { CStr::from_ptr(obj_type) }) {
+        // if let Err(e) = writeln!(file, "{} slot = {}, obj = {}, parent = {}, t = {:?}",  chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"), slot, internal_obj, orig_obj, unsafe { CStr::from_ptr(obj_type) }) {
         //     eprintln!("Couldn't write to file: {}", e);
         // }
 

@@ -14,6 +14,7 @@ use crate::JuliaVM;
 use crate::SINGLETON;
 use crate::Julia_Upcalls;
 use crate::UPCALLS;
+use crate::scanning::object_is_managed_by_mmtk;
 use std::sync::RwLockWriteGuard;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
@@ -251,6 +252,9 @@ pub extern "C" fn harness_end(_tls: OpaquePointer) {
 
 #[no_mangle]
 pub extern "C" fn register_finalizer(obj: ObjectReference, finalizer_fn: Address, is_obj_ptr: bool) {
+    if object_is_managed_by_mmtk(finalizer_fn.as_usize()) {
+        mmtk_pin_object(unsafe { finalizer_fn.to_object_reference() });
+    }
     memory_manager::add_finalizer(&SINGLETON, JuliaFinalizableObject(obj, finalizer_fn, is_obj_ptr));
 }
 
@@ -382,11 +386,10 @@ pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
 
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
-    let object_is_forwarded = unsafe {((*UPCALLS).pin_check_forwarded)(object)};
-
-    if object_is_forwarded {
-        println!("Object {} has been forwaded", object);
-    }
-
     memory_manager::pin_object(&SINGLETON, object)
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {
+    memory_manager::is_pinned(&SINGLETON, object)
 }

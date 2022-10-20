@@ -121,7 +121,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             obj_size
         };
 
-        size
+        size as usize
     }
 
     fn get_size_when_copied(_object: ObjectReference) -> usize {

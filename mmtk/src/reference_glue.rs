@@ -3,6 +3,7 @@ use mmtk::util::{ObjectReference, Address};
 use mmtk::util::opaque_pointer::*;
 use mmtk::vm::Finalizable;
 use mmtk::scheduler::ProcessEdgesWork;
+use crate::api::mmtk_pin_object;
 use crate::julia_types::*;
 use crate::JuliaVM;
 
@@ -23,9 +24,13 @@ impl Finalizable for JuliaFinalizableObject {
     self.0 = object;
   }
   fn keep_alive<E: ProcessEdgesWork>(&mut self, trace: &mut E) {
-    self.set_reference(trace.trace_object(self.get_reference()));
+    let reference = self.get_reference();
+    self.set_reference(trace.trace_object(reference));
+
     if crate::scanning::object_is_managed_by_mmtk(self.1.as_usize()) {
-      trace.trace_object(unsafe {self.1.to_object_reference()});
+      let obj_ref = unsafe {self.1.to_object_reference()};
+      mmtk_pin_object(obj_ref);
+      trace.trace_object(obj_ref);
     }
   }
 }
