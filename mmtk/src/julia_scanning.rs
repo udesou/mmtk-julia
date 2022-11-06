@@ -17,7 +17,7 @@ extern "C" {
     static jl_simplevector_type: *const mmtk_jl_datatype_t;
     static jl_array_typename: *mut mmtk_jl_typename_t;
     static jl_module_type: *const mmtk_jl_datatype_t;
-    static jl_task_type: *const mmtk_jl_datatype_t;
+    pub static jl_task_type: *const mmtk_jl_datatype_t;
     static jl_string_type: *const mmtk_jl_datatype_t;
     static jl_weakref_type: *const mmtk_jl_datatype_t;
 }
@@ -305,6 +305,23 @@ pub fn process_edge(closure : &mut dyn EdgeVisitor<JuliaVMEdge>, slot: Address, 
             let has_been_scanned = ((*UPCALLS).julia_object_has_been_scanned)(internal_obj_addr);
             if has_been_scanned == 0 {
                 ((*UPCALLS).mark_julia_object_as_scanned)(internal_obj_addr);
+
+                // use std::fs::OpenOptions;
+                // use std::io::Write;
+                // use std::ffi::CStr;
+
+                // let mut file = OpenOptions::new()
+                //         .write(true)
+                //         .append(true)
+                //         .create(true)
+                //         .open("/home/eduardo/mmtk-julia/scanned_objs.log")
+                //         .unwrap();
+
+                // if let Err(e) = writeln!(file, "{} slot = {}, obj = {}, parent = {}, t = {:?}",  chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"), slot, internal_obj, orig_obj, unsafe { CStr::from_ptr(obj_type) }) {
+                //     eprintln!("Couldn't write to file: {}", e);
+                // }
+
+
                 closure.visit_edge(JuliaVMEdge::Simple(simple_edge));
             }
         }            

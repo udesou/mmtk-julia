@@ -107,6 +107,9 @@ lazy_static! {
     pub static ref TASK_ROOTS: Mutex<HashSet<Address>> = {
         Mutex::new(HashSet::new())
     };
+    pub static ref RED_ROOTS: Mutex<HashSet<Address>> = {
+        Mutex::new(HashSet::new())
+    };
     pub static ref MUTATOR_TLS: RwLock<HashSet<String>> =
         RwLock::new(HashSet::new());
     pub static ref MUTATORS: RwLock<Vec<ObjectReference>> =
@@ -139,7 +142,7 @@ pub struct Julia_Upcalls {
     pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn),
     pub scan_julia_exc_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn),
     pub get_stackbase: extern "C" fn(tid: i16) -> u64,
-    pub calculate_roots: extern "C" fn(tls: OpaquePointer) -> i8,
+    pub calculate_roots: extern "C" fn(tls: OpaquePointer),
     pub run_finalizer_function: extern "C" fn(obj: ObjectReference, function: Address, is_ptr: bool),
     pub get_jl_last_err: extern "C" fn () -> u64,
     pub set_jl_last_err: extern "C" fn (errno: u64),
@@ -154,11 +157,13 @@ pub struct Julia_Upcalls {
     pub jl_throw_out_of_memory_error: extern "C" fn (),
     pub mark_julia_object_as_scanned: extern "C" fn (obj: Address),
     pub julia_object_has_been_scanned: extern "C" fn (obj: Address) -> i8,
-    pub sweep_malloced_array: extern "C" fn (),
+    pub mmtk_sweep_malloced_array: extern "C" fn (),
     pub wait_in_a_safepoint: extern "C" fn () -> i8,
     pub exit_from_safepoint: extern "C" fn (old_state: i8),
     pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
     pub check_pinned: extern "C" fn(obj: ObjectReference) -> bool,
+    pub collect_stack_roots: extern "C" fn(obj: Address),
+    pub mmtk_sweep_stack_pools: extern "C" fn (),
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

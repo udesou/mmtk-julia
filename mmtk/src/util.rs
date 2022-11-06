@@ -1,6 +1,7 @@
 
-use crate::TASK_ROOTS;
+use crate::{TASK_ROOTS, RED_ROOTS};
 use crate::api::{start_control_collector, start_worker};
+use crate::julia_scanning::{jl_task_type, mmtk_jl_typeof};
 use mmtk::util::opaque_pointer::*;
 use crate::JuliaVM;
 use mmtk::scheduler::{GCWorker, GCController};
@@ -60,15 +61,25 @@ pub extern "C" fn start_spawned_controller_thread(tls: VMWorkerThread, ctx: *mut
 
 #[no_mangle]
 pub extern "C" fn add_object_to_mmtk_roots(addr: Address) {
+    // println!("root = {}", addr);
     // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
     ROOTS.lock().unwrap().insert(addr);
+    if unsafe { Address::to_ptr(mmtk_jl_typeof(addr)) == jl_task_type } {
+        TASK_ROOTS.lock().unwrap().insert(addr);
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn add_object_to_mmtk_task_roots(addr: Address) {
+    if unsafe { Address::to_ptr(mmtk_jl_typeof(addr)) == jl_task_type } {
+        TASK_ROOTS.lock().unwrap().insert(addr);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn add_object_to_mmtk_red_roots(addr: Address) {
     // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
-    TASK_ROOTS.lock().unwrap().insert(addr);
-    ROOTS.lock().unwrap().insert(addr);
+    RED_ROOTS.lock().unwrap().insert(addr);
 }
 
 #[inline(always)]

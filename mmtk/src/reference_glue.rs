@@ -3,12 +3,11 @@ use mmtk::util::{ObjectReference, Address};
 use mmtk::util::opaque_pointer::*;
 use mmtk::vm::Finalizable;
 use mmtk::scheduler::ProcessEdgesWork;
-use crate::api::mmtk_pin_object;
 use crate::julia_types::*;
 use crate::JuliaVM;
 
 extern "C" {
-  static jl_nothing: *mut mmtk_jl_value_t;
+  pub static jl_nothing: *mut mmtk_jl_value_t;
 }
 
 #[derive(Copy, Clone, Eq, Hash, PartialOrd, PartialEq, Debug)]
@@ -26,10 +25,8 @@ impl Finalizable for JuliaFinalizableObject {
   fn keep_alive<E: ProcessEdgesWork>(&mut self, trace: &mut E) {
     let reference = self.get_reference();
     self.set_reference(trace.trace_object(reference));
-
     if crate::scanning::object_is_managed_by_mmtk(self.1.as_usize()) {
       let obj_ref = unsafe {self.1.to_object_reference()};
-      mmtk_pin_object(obj_ref);
       trace.trace_object(obj_ref);
     }
   }
@@ -60,6 +57,11 @@ impl ReferenceGlue<JuliaVM> for VMReferenceGlue {
         referent = Address::from_mut_ptr((*reff).value).to_object_reference();
       }
       referent
+    }
+
+    fn is_referent_cleared(referent: ObjectReference) -> bool {
+      let jl_nothing_obj_ref = unsafe { Address::from_mut_ptr(jl_nothing).to_object_reference()  };
+      referent == jl_nothing_obj_ref
     }
 
     fn enqueue_references(_references: &[ObjectReference], _tls: VMWorkerThread) {

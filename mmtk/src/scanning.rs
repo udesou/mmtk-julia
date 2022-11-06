@@ -6,11 +6,15 @@ use mmtk::vm::RootsWorkFactory;
 use mmtk::util::ObjectReference;
 use mmtk::util::opaque_pointer::*;
 use mmtk::scheduler::*;
+use crate::RED_ROOTS;
 use crate::TASK_ROOTS;
 use crate::api::mmtk_pin_object;
-use crate::julia_scanning::read_stack;
-use crate::julia_types::mmtk_jl_gcframe_t;
+use crate::julia_scanning::jl_task_type;
+use crate::julia_scanning::mmtk_jl_typeof;
+use crate::julia_types::mmtk_jl_datatype_layout_t;
+use crate::julia_types::mmtk_jl_datatype_t;
 use crate::julia_types::mmtk_jl_task_t;
+use crate::reference_glue::jl_nothing;
 use crate::{SINGLETON, ROOTS, UPCALLS};
 use crate::object_model::BI_MARKING_METADATA_SPEC;
 use mmtk::util::Address;
@@ -38,30 +42,19 @@ impl Scanning<JuliaVM> for VMScanning {
         let mut roots: MutexGuard<HashSet<Address>> = TASK_ROOTS.lock().unwrap();
         info!("{} task roots", roots.len());
 
+        unsafe { process_stack_roots(roots.drain().collect()) } ;
+
+        let mut red_roots: MutexGuard<HashSet<Address>> = RED_ROOTS.lock().unwrap();
         let mut roots_to_scan = vec![];
 
-        // roots may contain mmtk objects
-        for obj in roots.drain() {
-            let red_stack_roots = unsafe { collect_stack_roots(obj) };
-            for stack_root in red_stack_roots {
-                if object_is_managed_by_mmtk(stack_root.to_address().as_usize()) {
-                    mmtk_pin_object(stack_root);
-                }
-                roots_to_scan.push(stack_root);  
-            }        
+        for obj in red_roots.drain() {
+            roots_to_scan.push(unsafe { obj.to_object_reference() } );
         }
 
         factory.create_process_node_roots_work(roots_to_scan);
     }
 
-    fn scan_thread_roots(_tls: VMWorkerThread, _factory: impl RootsWorkFactory<JuliaVMEdge>) {
-        
-    }
-
-    fn scan_thread_root(_tls: VMWorkerThread, _mutator: &'static mut Mutator<JuliaVM>, _factory: impl RootsWorkFactory<JuliaVMEdge>) {
-        unimplemented!()
-    }
-    fn scan_vm_specific_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<JuliaVMEdge>) {
+    fn scan_thread_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<JuliaVMEdge>) {
         let mut roots: MutexGuard<HashSet<Address>> = ROOTS.lock().unwrap();
         info!("{} thread roots", roots.len());
 
@@ -79,13 +72,20 @@ impl Scanning<JuliaVM> for VMScanning {
         factory.create_process_node_roots_work(roots_to_scan);
     }
 
+    fn scan_thread_root(_tls: VMWorkerThread, _mutator: &'static mut Mutator<JuliaVM>, _factory: impl RootsWorkFactory<JuliaVMEdge>) {
+        unimplemented!()
+    }
+    fn scan_vm_specific_roots(_tls: VMWorkerThread, mut _factory: impl RootsWorkFactory<JuliaVMEdge>) {
+        
+    }
+
     fn scan_object<EV: EdgeVisitor<JuliaVMEdge>>(_tls: VMWorkerThread, object: ObjectReference, edge_visitor: &mut EV) {
         process_object(object, edge_visitor);
     }
     fn notify_initial_thread_scan_complete(_partial_scan: bool, _tls: VMWorkerThread) {
         // Specific to JikesRVM - using it to load the work for sweeping malloced arrays
-        let sweep_malloced_arrays_work = SweepMallocedArrays::new();
-        memory_manager::add_work_packet(&SINGLETON, WorkBucketStage::Compact, sweep_malloced_arrays_work);
+        let sweep_julia_specific_work = SweepJuliaSpecific::new();
+        memory_manager::add_work_packet(&SINGLETON, WorkBucketStage::Compact, sweep_julia_specific_work);
     }
     fn supports_return_barrier() -> bool {
         unimplemented!()
@@ -94,50 +94,54 @@ impl Scanning<JuliaVM> for VMScanning {
     fn prepare_for_roots_re_scanning() { unimplemented!() }
 }
 
-unsafe fn collect_stack_roots(addr : Address) -> Vec<ObjectReference> {
-    let mut stack_roots = HashSet::new();
+unsafe fn process_stack_roots(mut roots : Vec<Address>) {
+    let mut processed_roots = HashSet::new();
 
+    while !roots.is_empty() {
+        let root = roots.pop().unwrap();
+        processed_roots.insert(root);
 
-    let ta = addr.to_ptr::<mmtk_jl_task_t>();
-    let mut s = (*ta).gcstack;
-    
-    let (offset, lb, ub) = (0, 0, usize::MAX);
+        let root_type = mmtk_jl_typeof(root);
+        assert_eq!(root_type, Address::from_ptr(jl_task_type));
+        let ta = root.to_ptr::<mmtk_jl_task_t>();
 
-    if s != std::ptr::null_mut() {
-        let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
-        let nroots_addr = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub);
-        let mut nroots = nroots_addr.load::<usize>();
-        let mut nr = nroots >> 2;
+        let next = (*ta).next;
+        if next != Address::from_mut_ptr(jl_nothing).to_mut_ptr() {
+            let next_addr = Address::from_mut_ptr(next);
+            let next_task_type = mmtk_jl_typeof(next_addr);
+            assert_eq!(next_task_type, Address::from_ptr(jl_task_type));
+            if !processed_roots.contains(&next_addr) {
+                roots.push(next_addr);
+            }
+        }
 
-        loop {
-            let rts = Address::from_mut_ptr(s) + 2 * std::mem::size_of::<Address>() as usize;                
-            for i in 0..nr {
-                if (nroots & 1) != 0 {
-                    let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
-                    let real_addr = read_stack(slot.load::<Address>(), offset, lb, ub);
-                    let obj : ObjectReference = real_addr.load();
-                    stack_roots.insert(obj);
-                } else {
-                    let slot = read_stack(rts + (i * std::mem::size_of::<Address>()), offset, lb, ub);
-                    let obj : ObjectReference = slot.load();
-                    stack_roots.insert(obj);
+        let queue = (*ta).queue;
+        if queue != Address::from_mut_ptr(jl_nothing).to_mut_ptr() {
+            let queue_addr = Address::from_mut_ptr(queue);
+            let obj_type_addr = mmtk_jl_typeof(queue_addr);
+            let obj_type = obj_type_addr.to_ptr::<mmtk_jl_datatype_t>();
+            let layout = (*obj_type).layout;
+            let npointers = (*layout).npointers;
+            let layout_fields = Address::from_ptr(layout) + std::mem::size_of::<mmtk_jl_datatype_layout_t>();
+            let fielddesc_size = 2 << (*layout).fielddesc_type();
+            let obj8_start_addr = layout_fields + fielddesc_size * (*layout).nfields as usize;
+            let obj8_end_addr = obj8_start_addr + npointers as usize;
+            for elem_usize in obj8_start_addr.as_usize()..obj8_end_addr.as_usize() {
+                let elem = queue_addr.to_mut_ptr::<*mut libc::c_uchar>();
+                let index = Address::from_usize(elem_usize).to_mut_ptr::<libc::c_uchar>();
+                let slot: *mut libc::c_uchar = &mut *elem.offset(*index as isize) as *mut *mut libc::c_uchar as *mut libc::c_uchar;
+                let queued_task = Address::from_mut_ptr(slot).load::<Address>();
+                if !processed_roots.contains(&queued_task) {
+                    let queued_task_type = mmtk_jl_typeof(queued_task);
+                    assert_eq!(queued_task_type, Address::from_ptr(jl_task_type));
+                    roots.push(queued_task);
                 }
             }
-
-            let new_s = read_stack(Address::from_mut_ptr((*s).prev), offset, lb, ub);
-            s = new_s.to_mut_ptr::<mmtk_jl_gcframe_t>();
-            if s != std::ptr::null_mut() {
-                let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
-                nroots = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub).load();
-                nr = nroots >> 2;
-                continue;
-            }
-            break;
         }
+
+        ((*UPCALLS).collect_stack_roots)(root);
     }
 
-
-    stack_roots.into_iter().collect()
 }
 
 pub fn process_object(object: ObjectReference, closure: &mut dyn EdgeVisitor<JuliaVMEdge>) {
@@ -162,11 +166,11 @@ pub extern "C" fn object_is_managed_by_mmtk(addr: usize) -> bool {
 }
 
 // Sweep malloced arrays work
-pub struct SweepMallocedArrays {
+pub struct SweepJuliaSpecific {
     swept: bool
 }
 
-impl SweepMallocedArrays {
+impl SweepJuliaSpecific {
     pub fn new() -> Self {
         Self {
             swept: false
@@ -174,11 +178,12 @@ impl SweepMallocedArrays {
     }
 }
 
-impl<VM:VMBinding> GCWork<VM> for SweepMallocedArrays {
+impl<VM:VMBinding> GCWork<VM> for SweepJuliaSpecific {
     fn do_work(&mut self, _worker: &mut GCWorker<VM>, _mmtk: &'static MMTK<VM>) {
         // call sweep malloced arrays from UPCALLS
         unsafe {
-            ((*UPCALLS).sweep_malloced_array)()
+            ((*UPCALLS).mmtk_sweep_malloced_array)();
+            ((*UPCALLS).mmtk_sweep_stack_pools)();
         }
         self.swept = true;
     }
