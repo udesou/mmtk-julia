@@ -3,8 +3,6 @@
 
 extern Julia_Upcalls mmtk_upcalls;
 
-void combine_thread_gc_counts(jl_gc_num_t *dest);
-
 void calculate_roots(void* ptls);
 
 void run_finalizer_function(void *o, void *ff, bool is_ptr);
@@ -26,10 +24,6 @@ void set_gc_old_state(int8_t old_state);
 void mark_object_as_scanned(void* obj);
 
 int8_t object_has_been_scanned(void* obj);
-
-void sweep_malloced_arrays(void) JL_NOTSAFEPOINT;
-
-void jl_gc_wait_for_the_world(void);
 
 void mmtk_jl_gc_run_all_finalizers(void);
 
