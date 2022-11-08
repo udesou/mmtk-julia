@@ -11,11 +11,11 @@ use mmtk::vm::edge_shape::SimpleEdge;
 use crate::edges::OffsetEdge;
 
 const HT_NOTFOUND: usize = 1;
-const JL_BUFF_TAG: usize = 0x4eadc000; // from vm/julia/julia_internal
+pub const JL_BUFF_TAG: usize = 0x4eadc000; // from vm/julia/julia_internal
 
 extern "C" {
     static jl_simplevector_type: *const mmtk_jl_datatype_t;
-    static jl_array_typename: *mut mmtk_jl_typename_t;
+    pub static jl_array_typename: *mut mmtk_jl_typename_t;
     static jl_module_type: *const mmtk_jl_datatype_t;
     pub static jl_task_type: *const mmtk_jl_datatype_t;
     static jl_string_type: *const mmtk_jl_datatype_t;

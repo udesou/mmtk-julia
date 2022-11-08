@@ -933,10 +933,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
     const char *type_name = jl_typeof_str((jl_value_t*)obj);
 
     if (ta->excstack) { // inlining label `excstack` from mark_loop
-        // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
-        if (object_is_managed_by_mmtk(ta->excstack)) {
-            process_edge(closure, &ta->excstack, obj, type_name, vt);
-        }
+        process_edge(closure, &ta->excstack, obj, type_name, vt);
         jl_excstack_t *excstack = ta->excstack;
         size_t itr = ta->excstack->top;
         size_t bt_index = 0;
@@ -1024,6 +1021,10 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         } else if (flags.how == 3) { // has a pointer to the object that owns the data
             jl_value_t **owner_addr = jl_array_data_owner_addr(a);
             long offset = (uintptr_t)a->data - (uintptr_t)*owner_addr;
+            if(object_is_managed_by_mmtk(a->data) && !object_is_managed_by_mmtk(*owner_addr)) {
+                printf("a->data = %p, a = %p, *owner = %p\n", a->data, a, *owner_addr);
+                fflush(stdout);
+            }
             if (object_is_managed_by_mmtk(a->data) && object_is_managed_by_mmtk(*owner_addr)) {
                 process_offset_edge(closure, &a->data, offset);
             }
@@ -1075,7 +1076,8 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     elem_begin = obj8_begin;
                 }
             } else {
-                assert(0 && "unimplemented");
+                printf("UNIMPLEMENTED FOR FIELD DESC ARRAY!!!!");
+                fflush(stdout);
             }
         } else { 
             return;
@@ -1174,9 +1176,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         }
         if (ta->excstack) { // inlining label `excstack` from mark_loop
             // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
-            if (object_is_managed_by_mmtk(ta->excstack)) {
-                process_edge(closure, &ta->excstack, obj, type_name, vt);
-            }
+            process_edge(closure, &ta->excstack, obj, type_name, vt);
             jl_excstack_t *excstack = ta->excstack;
             size_t itr = ta->excstack->top;
             size_t bt_index = 0;
@@ -1256,11 +1256,14 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             }
             else if (layout->fielddesc_type == 2) {
                 // FIXME: scan obj32
-                assert(0 && "unimplemented for obj32");
+                printf("UNIMPLEMENTED FOR OBJ32\n");
+                fflush(stdout);
             }
             else {
                 // simply dispatch the work at the end of the function
                 assert(layout->fielddesc_type == 3);
+                printf("UNIMPLEMENTED FOR layout->fielddesc_type == 3\n");
+                fflush(stdout);
             }
         }
     }
@@ -1275,14 +1278,14 @@ void update_inlined_array(void* from, void* to) {
     uintptr_t tag_to = (uintptr_t)jl_typeof(jl_to);
     jl_datatype_t *vt = (jl_datatype_t*)tag_to;
 
-    if(vt != 0 && vt != jl_buff_tag) {
-        const char *type_name = jl_typeof_str((jl_value_t*)from);
-        FILE *fp;
-        fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
-        fprintf(fp, "\ttype = %s\n", type_name);
-        fflush(fp);
-        fclose(fp); 
-    }
+    // if(vt != 0 && vt != jl_buff_tag) {
+    //     const char *type_name = jl_typeof_str((jl_value_t*)from);
+    //     FILE *fp;
+    //     fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+    //     fprintf(fp, "\ttype = %s\n", type_name);
+    //     fflush(fp);
+    //     fclose(fp); 
+    // }
 
     if(vt->name == jl_array_typename) {
         jl_array_t *a = (jl_array_t*)jl_from;
