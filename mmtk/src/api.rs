@@ -386,10 +386,10 @@ pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
 
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
-    memory_manager::pin_object(&SINGLETON, object)
+    memory_manager::pin_object(object)
 }
 
 #[no_mangle]
 pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {
-    memory_manager::is_pinned(&SINGLETON, object)
+    memory_manager::is_pinned(object)
 }

@@ -70,9 +70,8 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             // regular object
             copy_context.alloc_copy( from_start_ref, bytes, 16, 8, semantics)
         } else if header_offset == 16 {
-            unimplemented!();
-            // buffer
-            // copy_context.alloc_copy( from_start_ref, bytes, 16, 0, semantics)
+            // buffer should not be copied
+            unimplemented!();            
         } else {
             unimplemented!()
         };
@@ -82,24 +81,8 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         let to_obj = unsafe { (dst + header_offset).to_object_reference() };
         copy_context.post_copy(to_obj, bytes, semantics);
 
-        // println!("copied object {}", from);
-
-        // use std::fs::OpenOptions;
-        // use std::io::Write;
-
-        // let mut file = OpenOptions::new()
-        //         .write(true)
-        //         .append(true)
-        //         .create(true)
-        //         .open("/home/eduardo/mmtk-julia/copied_objs.log")
-        //         .unwrap();
-
-        // if let Err(e) = writeln!(file, "copied object from {} to {}", from, to_obj) {
-        //         eprintln!("Couldn't write to file: {}", e);
-        // }
-
         unsafe {
-            ((*UPCALLS).introspect_objects_after_copying)(from.to_address(), to_obj.to_address())
+            ((*UPCALLS).update_inlined_array)(from.to_address(), to_obj.to_address())
         }
 
         to_obj
@@ -161,14 +144,6 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
 
     fn dump_object(_object: ObjectReference) {
         unimplemented!()
-    }
-
-    fn is_object_pinned(object: ObjectReference) -> bool {
-        if unsafe { LOCAL_PINNING_METADATA_BITS_SPEC.load::<JuliaVM, u8>(object, None) == 1 } {
-            return true
-        }
-
-        return unsafe {((*UPCALLS).check_pinned)(object)}
     }
 }
 

@@ -160,8 +160,7 @@ pub struct Julia_Upcalls {
     pub mmtk_sweep_malloced_array: extern "C" fn (),
     pub wait_in_a_safepoint: extern "C" fn () -> i8,
     pub exit_from_safepoint: extern "C" fn (old_state: i8),
-    pub introspect_objects_after_copying: extern "C" fn (to: Address, from: Address),
-    pub check_pinned: extern "C" fn(obj: ObjectReference) -> bool,
+    pub update_inlined_array: extern "C" fn (to: Address, from: Address),
     pub collect_stack_roots: extern "C" fn(obj: Address),
     pub mmtk_sweep_stack_pools: extern "C" fn (),
 }

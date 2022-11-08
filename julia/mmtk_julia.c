@@ -384,6 +384,33 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     return v;
 }
 
+// FIXME currently allocates into immortal space
+JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_immovable(jl_ptls_t ptls, int pool_offset,
+                                                    int osize, void *ty)
+{
+    // safepoint
+    if (__unlikely(jl_atomic_load(&jl_gc_running))) {
+        int8_t old_state = ptls->gc_state;
+        jl_atomic_store_release(&ptls->gc_state, JL_GC_STATE_WAITING);
+        jl_safepoint_wait_gc();
+        jl_atomic_store_release(&ptls->gc_state, old_state);
+    }
+
+    jl_value_t *v;
+
+    // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
+    jl_taggedvalue_t *v_tagged =
+        (jl_taggedvalue_t *) alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 1);
+
+    v = jl_valueof(v_tagged);
+
+    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 1);
+    ptls->gc_num.allocd += osize;
+    ptls->gc_num.poolalloc++;
+
+    return v;
+}
+
 JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_big(jl_ptls_t ptls, size_t sz)
 {
     // safepoint
@@ -703,24 +730,16 @@ static void queue_roots(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp)
 {
     // modules
     add_object_to_mmtk_roots(jl_main_module);
-    // printf("jl_main_module = %p\n", jl_main_module);
-    // fflush(stdout);
 
     // invisible builtin values
     if (jl_an_empty_vec_any != NULL){ 
         add_object_to_mmtk_roots(jl_an_empty_vec_any);
-        // printf("jl_an_empty_vec_any = %p\n", jl_an_empty_vec_any);
-        // fflush(stdout);
     }
     if (jl_module_init_order != NULL) {
-        // printf("jl_module_init_order = %p\n", jl_module_init_order);
-        // fflush(stdout);
         add_object_to_mmtk_roots(jl_module_init_order);
     }
     for (size_t i = 0; i < jl_current_modules.size; i += 2) {
         if (jl_current_modules.table[i + 1] != HT_NOTFOUND) {
-            // printf("jl_current_modules.table[%d] = %p\n", i, jl_current_modules.table[i]);
-            // fflush(stdout);
             add_object_to_mmtk_roots(jl_current_modules.table[i]);
         }
     }
@@ -805,7 +824,7 @@ JL_DLLEXPORT void collect_stack_roots(void* obj) {
         uintptr_t offset = stack.offset;
         uintptr_t lb = stack.lb;
         uintptr_t ub = stack.ub;
-        uint32_t nr = nroots >> 2;
+        uint32_t nr = nroots >> 3;
         jl_value_t *new_obj = NULL;
         while (1) {
             jl_value_t ***rts = (jl_value_t***)(((void**)s) + 2);
@@ -834,7 +853,7 @@ JL_DLLEXPORT void collect_stack_roots(void* obj) {
                 uintptr_t new_nroots = mmtk_gc_read_stack(&s->nroots, offset, lb, ub);
                 assert(new_nroots <= UINT32_MAX);
                 nroots = stack.nroots = (uint32_t)new_nroots;
-                nr = nroots >> 2;
+                nr = nroots >> 3;
                 continue;
             }
             break;
@@ -1125,7 +1144,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             uintptr_t offset = stack.offset;
             uintptr_t lb = stack.lb;
             uintptr_t ub = stack.ub;
-            uint32_t nr = nroots >> 2;
+            uint32_t nr = nroots >> 3;
             while (1) {
                 jl_value_t ***rts = (jl_value_t***)(((void**)s) + 2);
                 for (; i < nr; i++) {
@@ -1147,7 +1166,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     uintptr_t new_nroots = mmtk_gc_read_stack(&s->nroots, offset, lb, ub);
                     assert(new_nroots <= UINT32_MAX);
                     nroots = stack.nroots = (uint32_t)new_nroots;
-                    nr = nroots >> 2;
+                    nr = nroots >> 3;
                     continue;
                 }
                 break;
@@ -1188,7 +1207,6 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 process_edge(closure, stack_obj_edge, obj, type_name, vt);
             }
         }
-        // fclose(fp);
         const jl_datatype_layout_t *layout = jl_task_type->layout; // inlining label `obj8_loaded` from mark_loop 
         assert(layout->fielddesc_type == 0);
         assert(layout->nfields > 0);
@@ -1250,26 +1268,22 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
     return;
 }
 
-void introspect_objects_after_copying(void* from, void* to) {
+void update_inlined_array(void* from, void* to) {
     jl_value_t* jl_from = (jl_value_t*) from;
     jl_value_t* jl_to = (jl_value_t*) to;
 
     uintptr_t tag_to = (uintptr_t)jl_typeof(jl_to);
-    uintptr_t tag_from = (uintptr_t)jl_typeof(jl_from);
+    jl_datatype_t *vt = (jl_datatype_t*)tag_to;
 
-    if(tag_to != tag_from) {
-        printf("TAGS ARE DIFFERENT?\n");
-        fflush(stdout);
+    if(vt != 0 && vt != jl_buff_tag) {
+        const char *type_name = jl_typeof_str((jl_value_t*)from);
+        FILE *fp;
+        fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+        fprintf(fp, "\ttype = %s\n", type_name);
+        fflush(fp);
+        fclose(fp); 
     }
 
-    // const char *type_name = jl_typeof_str(from);
-    // FILE *fp;
-    // fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
-    // fprintf(fp, "\ttype = %s\n", type_name);
-    // fflush(fp);
-    // fclose(fp); 
-
-    jl_datatype_t *vt = (jl_datatype_t*)tag_to;
     if(vt->name == jl_array_typename) {
         jl_array_t *a = (jl_array_t*)jl_from;
         jl_array_t *b = (jl_array_t*)jl_to;
@@ -1283,37 +1297,6 @@ void introspect_objects_after_copying(void* from, void* to) {
         }
     }
 }
-
-bool check_pinned(void* object) {
-    uintptr_t obj_type = (uintptr_t)jl_typeof((jl_value_t*)object);
-    if(obj_type == 0) {
-        return 0;
-    }
-
-    if(obj_type == jl_buff_tag) {
-        return 0;
-    }
-
-    const char *type_name = jl_typeof_str((jl_value_t*)object);
-
-    if(type_name == 0) {
-        return 0;
-    }
-
-    // if(strcmp(type_name, "Task") == 0) {
-    //     return 1;
-    // }
-
-    if(((jl_datatype_t *)obj_type)->name == jl_array_typename) {
-        jl_array_t *a = (jl_array_t*)object;
-        if (a->flags.isshared == 1) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 
 // number of stacks to always keep available per pool - from gc-stacks.c
 #define MIN_STACK_MAPPINGS_PER_POOL 5
@@ -1396,6 +1379,6 @@ void mmtk_sweep_stack_pools(void)
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, introspect_objects_after_copying, check_pinned, collect_stack_roots,
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, update_inlined_array, collect_stack_roots,
                                mmtk_sweep_stack_pools
                              };

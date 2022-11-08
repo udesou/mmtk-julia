@@ -59,34 +59,7 @@ impl Collection<JuliaVM> for VMCollection {
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
-        // b /home/eduardo/mmtk-julia/mmtk/src/collection.rs:62
         info!("Triggered GC!");
-
-        // use std::fs::OpenOptions;
-        // use std::io::Write;
-
-        // let mut file = OpenOptions::new()
-        //         .write(true)
-        //         .append(true)
-        //         .create(true)
-        //         .open("/home/eduardo/mmtk-julia/scanned_objs.log")
-        //         .unwrap();
-
-        // if let Err(e) = writeln!(file, "\n {} Triggered GC!\n\n",  chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"),) {
-        //     eprintln!("Couldn't write to file: {}", e);
-        // }
-        
-        unsafe {
-            AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
-
-            let &(ref lock, ref cvar) = &*STFF_COND.clone();
-            let mut count = lock.lock().unwrap();
-            *count += 1;
-
-            while AtomicBool::load(&FINALIZERS_RUNNING, Ordering::SeqCst) {
-                count = cvar.wait(count).unwrap();
-            }
-        }   
 
         let tls_ptr = match tls {
             VMMutatorThread(t) => match t {
@@ -94,26 +67,23 @@ impl Collection<JuliaVM> for VMCollection {
             }
         };
 
-
-        let old_state = unsafe {
-            ((*UPCALLS).set_gc_initial_state)(tls_ptr)
-        };      
+        unsafe {
+            AtomicBool::store(&BLOCK_FOR_GC, true, Ordering::SeqCst);
+    
+            let &(ref lock, ref cvar) = &*STFF_COND.clone();
+            let mut count = lock.lock().unwrap();
+            *count += 1;
+    
+            while AtomicBool::load(&FINALIZERS_RUNNING, Ordering::SeqCst) {
+                count = cvar.wait(count).unwrap();
+            }
+        }   
+        
+        let (old_state, last_err) = prepare_for_gc(tls_ptr);
 
         if old_state as u32 == u32::MAX {
             info!("Multiple threads entered GC simultaneously.");           
             return;
-        }
-
-        unsafe {
-            ((*UPCALLS).wait_for_the_world)()
-        };
-
-        let last_err = unsafe {
-            ((*UPCALLS).get_jl_last_err)()
-        };
-
-        unsafe {
-            ((*UPCALLS).calculate_roots)(tls_ptr);
         }
 
         let &(ref lock, ref cvar) = &*STW_COND.clone();
@@ -183,6 +153,31 @@ impl Collection<JuliaVM> for VMCollection {
         _mutator: &T,
     ) {
     }
+}
+
+fn prepare_for_gc(tls_ptr : OpaquePointer) -> (i8, u64) {
+
+    let old_state = unsafe {
+        ((*UPCALLS).set_gc_initial_state)(tls_ptr)
+    };      
+
+    if old_state as u32 == u32::MAX {    
+        return (old_state, 0);
+    }
+
+    unsafe {
+        ((*UPCALLS).wait_for_the_world)()
+    };
+
+    let last_err = unsafe {
+        ((*UPCALLS).get_jl_last_err)()
+    };
+
+    unsafe {
+        ((*UPCALLS).calculate_roots)(tls_ptr);
+    }
+
+    (old_state, last_err)
 }
 
 #[no_mangle]
