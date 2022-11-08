@@ -1,3 +1,4 @@
+use atomic::Ordering;
 use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::ObjectModel;
 use mmtk::util::copy::*;
@@ -84,6 +85,18 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         unsafe {
             ((*UPCALLS).update_inlined_array)(from.to_address(), to_obj.to_address())
         }
+
+        // zero from_obj
+        unsafe {
+            libc::memset(from_start_ref.to_address().to_mut_ptr(), 0, bytes);
+        }
+
+        Self::LOCAL_FORWARDING_BITS_SPEC.store_atomic::<JuliaVM, u8>(
+            from,
+            2 as u8,
+            None,
+            Ordering::SeqCst,
+        );
 
         to_obj
     }

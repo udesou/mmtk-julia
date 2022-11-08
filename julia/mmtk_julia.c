@@ -1278,14 +1278,14 @@ void update_inlined_array(void* from, void* to) {
     uintptr_t tag_to = (uintptr_t)jl_typeof(jl_to);
     jl_datatype_t *vt = (jl_datatype_t*)tag_to;
 
-    // if(vt != 0 && vt != jl_buff_tag) {
-    //     const char *type_name = jl_typeof_str((jl_value_t*)from);
-    //     FILE *fp;
-    //     fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
-    //     fprintf(fp, "\ttype = %s\n", type_name);
-    //     fflush(fp);
-    //     fclose(fp); 
-    // }
+    if(vt != 0 && vt != jl_buff_tag) {
+        const char *type_name = jl_typeof_str((jl_value_t*)from);
+        FILE *fp;
+        fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+        fprintf(fp, "\ttype = %s\n", type_name);
+        fflush(fp);
+        fclose(fp); 
+    }
 
     if(vt->name == jl_array_typename) {
         jl_array_t *a = (jl_array_t*)jl_from;
