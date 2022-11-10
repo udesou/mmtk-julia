@@ -867,6 +867,7 @@ static void jl_gc_queue_thread_local_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_ma
         collect_stack_roots((jl_value_t*)ptls2->heap.live_tasks.items[i]);
     }
 
+    add_object_to_mmtk_roots(jl_current_task);
     add_object_to_mmtk_roots(ptls2->current_task);
     add_object_to_mmtk_roots(ptls2->root_task);
     if (ptls2->next_task) {

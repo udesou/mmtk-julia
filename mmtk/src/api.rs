@@ -390,18 +390,9 @@ pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
 
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
-    // let obj_type_addr = unsafe { mmtk_jl_typeof(object.to_address()) };
-    // let obj_type = obj_type_addr.to_ptr::<mmtk_jl_datatype_t>();
-
-    // if obj_type_addr.as_usize() == JL_BUFF_TAG {
-    //     return memory_manager::pin_object(object);
-    // }
-
-    // unsafe {
-    // if (*obj_type).name == jl_array_typename {
-    //     println!("pinning array {}", object)
-    // }
-    // }
+    if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
+        return false;
+    }
     memory_manager::pin_object(object)
 }
 
