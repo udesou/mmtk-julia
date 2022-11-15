@@ -120,7 +120,7 @@ impl Collection<JuliaVM> for VMCollection {
         info!("GC Done!");
 
         unsafe {
-            ((*UPCALLS).set_gc_final_state)(old_state as usize)
+            ((*UPCALLS).set_gc_final_state)(old_state)
         };
         
 
