@@ -82,26 +82,26 @@ extern void* trace_retain_referent(MMTk_TraceLocal trace_local, void* obj);
 typedef struct {
     void (* scan_julia_obj) (void* obj, closure_pointer closure, ProcessEdgeFn process_edge, ProcessOffsetEdgeFn process_offset_edge);
     void (* scan_julia_exc_obj) (void* obj, closure_pointer closure, ProcessEdgeFn process_edge);
-    void (* get_stackbase) (int tid);
+    void* (* get_stackbase) (signed short tid);
     void (* calculate_roots) (void* tls);
     void (* run_finalizer_function) (void* obj, void* function, bool is_ptr);
-    void (* get_jl_last_err) (void);
-    void (* set_jl_last_err) (int errno);
-    void (* get_lo_size) (void* obj);
-    void (* get_so_size) (void* obj, size_t actual_size);
-    void (* get_obj_start_ref) (void* obj);
+    unsigned long (* get_jl_last_err) (void);
+    void (* set_jl_last_err) (unsigned long errno);
+    unsigned long (* get_lo_size) (void* obj);
+    unsigned long (* get_so_size) (void* obj);
+    void* (* get_obj_start_ref) (void* obj);
     void (* wait_for_the_world) (void);
-    void (* set_gc_initial_state) (void* tls);
-    void (* set_gc_final_state) (int old_state);
-    void (* set_gc_old_state) (int old_state);
+    signed char (* set_gc_initial_state) (void* tls);
+    void (* set_gc_final_state) (signed char old_state);
+    void (* set_gc_old_state) (signed char old_state);
     void (* mmtk_jl_run_finalizers) (void* tls);
-    void (* jl_throw_out_of_memory_error) ();
+    void (* jl_throw_out_of_memory_error) (void);
     void (* mark_object_as_scanned) (void* obj);
-    void (* object_has_been_scanned) (void* obj);
-    void (* sweep_malloced_array) ();
-    void (* get_malloced_bytes) (void* tls);
-    void (* wait_in_a_safepoint) ();
-    void (* exit_from_safepoint) (int old_state);
+    signed char (* object_has_been_scanned) (void* obj);
+    void (* sweep_malloced_array) (void);
+    signed char (* wait_in_a_safepoint) (void);
+    void (* exit_from_safepoint) (signed char old_state);
+    void (* mmtk_sweep_stack_pools) (void);
 } Julia_Upcalls;
 
 /**
@@ -122,6 +122,7 @@ extern void register_finalizer(void* obj, void* function, bool is_ptr);
 extern void run_finalizers_for_obj(void* obj);
 extern void mmtk_run_finalizers(bool at_exit);
 extern void mmtk_gc_poll(void *tls);
+extern void add_object_to_mmtk_roots(void* obj);
 
 /**
  * VM Accounting

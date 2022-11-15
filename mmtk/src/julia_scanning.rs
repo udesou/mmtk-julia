@@ -170,7 +170,7 @@ pub unsafe fn scan_julia_object(addr: Address, closure : &mut dyn EdgeVisitor<Ju
                 panic!("tid must be positive.")
             }
             let stackbase = ((*UPCALLS).get_stackbase)((*ta).tid);
-            ub = stackbase;
+            ub = stackbase as usize;
             lb = ub - (*ta).copy_stack() as usize;
             offset = Address::from_mut_ptr(stkbuf).as_usize() - lb as usize;
         }

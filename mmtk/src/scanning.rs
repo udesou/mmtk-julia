@@ -11,7 +11,6 @@ use crate::object_model::BI_MARKING_METADATA_SPEC;
 use mmtk::util::Address;
 use mmtk::MMTK;
 use mmtk::vm::VMBinding;
-use mmtk::util::metadata::side_metadata::{load_atomic, store_atomic};
 use crate::edges::JuliaVMEdge;
 #[cfg(feature = "scan_obj_c")]
 use crate::julia_scanning::process_edge;
@@ -54,7 +53,7 @@ impl Scanning<JuliaVM> for VMScanning {
     }
     fn notify_initial_thread_scan_complete(_partial_scan: bool, _tls: VMWorkerThread) {
         // Specific to JikesRVM - using it to load the work for sweeping malloced arrays
-        let sweep_malloced_arrays_work = SweepMallocedArrays::new();
+        let sweep_malloced_arrays_work = SweepJuliaSpecific::new();
         memory_manager::add_work_packet(&SINGLETON, WorkBucketStage::Compact, sweep_malloced_arrays_work);
     }
     fn supports_return_barrier() -> bool {
@@ -88,12 +87,12 @@ pub extern "C" fn object_is_managed_by_mmtk(addr: usize) -> bool {
     res
 }
 
-// Sweep malloced arrays work
-pub struct SweepMallocedArrays {
+// Sweep Julia specific data structures work
+pub struct SweepJuliaSpecific {
     swept: bool
 }
 
-impl SweepMallocedArrays {
+impl SweepJuliaSpecific {
     pub fn new() -> Self {
         Self {
             swept: false
@@ -101,11 +100,12 @@ impl SweepMallocedArrays {
     }
 }
 
-impl<VM:VMBinding> GCWork<VM> for SweepMallocedArrays {
+impl<VM:VMBinding> GCWork<VM> for SweepJuliaSpecific {
     fn do_work(&mut self, _worker: &mut GCWorker<VM>, _mmtk: &'static MMTK<VM>) {
         // call sweep malloced arrays from UPCALLS
         unsafe {
-            ((*UPCALLS).sweep_malloced_array)()
+            ((*UPCALLS).mmtk_sweep_malloced_array)();
+            ((*UPCALLS).mmtk_sweep_stack_pools)();
         }
         self.swept = true;
     }
@@ -113,10 +113,11 @@ impl<VM:VMBinding> GCWork<VM> for SweepMallocedArrays {
 
 #[no_mangle]
 pub extern "C" fn mark_metadata_scanned(addr : Address) {
-    store_atomic(&BI_MARKING_METADATA_SPEC, addr, 1, Ordering::SeqCst );
+    BI_MARKING_METADATA_SPEC.store_atomic::<u8>(addr, 1, Ordering::SeqCst );
 }
 
 #[no_mangle]
-pub extern "C" fn check_metadata_scanned(addr : Address) -> usize {
-    load_atomic(&BI_MARKING_METADATA_SPEC, addr, Ordering::SeqCst )
+pub extern "C" fn check_metadata_scanned(addr : Address) -> u8 {
+    BI_MARKING_METADATA_SPEC.load_atomic::<u8>( addr, Ordering::SeqCst )
 }
+
