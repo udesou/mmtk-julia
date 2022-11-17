@@ -2,6 +2,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use libc::c_char;
+use core::panic;
 use std::ffi::CStr;
 use mmtk::memory_manager;
 use mmtk::AllocationSemantics;

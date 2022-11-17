@@ -81,10 +81,7 @@ pub fn process_object(object: ObjectReference, closure: &mut dyn EdgeVisitor<Jul
 
 #[no_mangle]
 pub extern "C" fn object_is_managed_by_mmtk(addr: usize) -> bool {
-    let res = addr >= crate::api::starting_heap_address().as_usize()
-        && addr <= crate::api::last_heap_address().as_usize();
-
-    res
+    memory_manager::is_mapped_address(unsafe { Address::from_usize(addr) })
 }
 
 // Sweep Julia specific data structures work

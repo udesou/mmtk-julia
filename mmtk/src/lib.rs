@@ -135,7 +135,7 @@ type ProcessOffsetEdgeFn = *const extern "C" fn(closure: &mut dyn EdgeVisitor<Ju
 pub struct Julia_Upcalls {
     pub scan_julia_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn, process_offset_edge: ProcessOffsetEdgeFn),
     pub scan_julia_exc_obj: extern "C" fn(obj: Address, closure: &mut dyn EdgeVisitor<JuliaVMEdge>, process_edge: ProcessEdgeFn),
-    pub get_stackbase: extern "C" fn(tid: i16) -> u64,
+    pub get_stackbase: extern "C" fn(tid: u16) -> u64,
     pub calculate_roots: extern "C" fn(tls: OpaquePointer),
     pub run_finalizer_function: extern "C" fn(obj: ObjectReference, function: Address, is_ptr: bool),
     pub get_jl_last_err: extern "C" fn () -> u64,

@@ -6,7 +6,7 @@
 
 extern int64_t perm_scanned_bytes;
 extern void run_finalizer(jl_task_t *ct, jl_value_t *o, jl_value_t *ff);
-extern JL_DLLIMPORT int jl_n_threads;
+extern JL_DLLIMPORT _Atomic(int) jl_n_threads;
 extern void *sysimg_base;
 extern void *sysimg_end;
 extern JL_DLLEXPORT void *jl_get_ptls_states(void);
@@ -942,7 +942,12 @@ void mmtk_sweep_stack_pools(void)
         while (1) {
             jl_task_t *t = (jl_task_t*)lst[n];
             assert(jl_is_task(t));
-            if (is_live_object(t)) {
+            if (object_is_managed_by_mmtk(t) && is_live_object(t)) {
+                if (t->stkbuf == NULL)
+                    ndel++; // jl_release_task_stack called
+                else
+                    n++;
+            } else if (!object_is_managed_by_mmtk(t) && object_has_been_scanned(t)) {
                 if (t->stkbuf == NULL)
                     ndel++; // jl_release_task_stack called
                 else

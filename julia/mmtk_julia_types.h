@@ -1,4 +1,4 @@
-// install bindgen with cargo install bindgen
+// install bindgen with cargo install bindgen-cli
 // run ~/.cargo/bin/bindgen /home/eduardo/mmtk-julia/julia/mmtk_julia_types.h -o /home/eduardo/mmtk-julia/mmtk/src/julia_types.rs
 #include <setjmp.h>	
 
@@ -61,6 +61,7 @@ typedef struct {
 } mmtk_jl_array_flags_t;
 
 typedef struct {
+    uint32_t size;
     uint32_t nfields;
     uint32_t npointers; // number of pointers embedded inside
     int32_t first_ptr; // index of the first pointer (or -1)
@@ -98,6 +99,7 @@ typedef struct {
     uint8_t abstract:1;
     uint8_t mutabl:1;
     uint8_t mayinlinealloc:1;
+    uint8_t _reserved:5;
     uint8_t max_methods; // override for inference's max_methods setting (0 = no additional limit or relaxation)
 } mmtk_jl_typename_t;
 
@@ -114,7 +116,6 @@ typedef struct mmtk__jl_datatype_t {
     mmtk_jl_svec_t *types;
     mmtk_jl_value_t *instance;  // for singletons
     const mmtk_jl_datatype_layout_t *layout;
-    int32_t size; // TODO: move to _jl_datatype_layout_t
     // memoized properties
     uint32_t hash;
     uint8_t hasfreetypevars:1; // majority part of isconcrete computation
@@ -124,6 +125,7 @@ typedef struct mmtk__jl_datatype_t {
     uint8_t zeroinit:1; // if one or more fields requires zero-initialization
     uint8_t has_concrete_subtype:1; // If clear, no value will have this datatype
     uint8_t cached_by_hash:1; // stored in hash-based set cache (instead of linear cache)
+    uint8_t isprimitivetype:1; // whether this is declared with 'primitive type' keyword (sized, no fields, and immutable)
 } mmtk_jl_datatype_t;
 
 typedef struct {
