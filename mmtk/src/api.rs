@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use crate::reference_glue::JuliaFinalizableObject;
 use crate::{ARE_MUTATORS_BLOCKED, BUILDER, UC_COND, STFF_COND, DISABLED_GC, FINALIZERS_RUNNING, USER_TRIGGERED_GC, MUTATORS, MUTATOR_TLS, get_mutator_ref, set_julia_obj_header_size};
 use log::info;
+use crate::scanning::object_is_managed_by_mmtk;
 
 #[no_mangle]
 pub extern "C" fn gc_init(heap_size: usize, calls: *const Julia_Upcalls, header_size: usize) {
@@ -380,4 +381,25 @@ pub extern "C" fn mmtk_free_aligned(addr: Address) {
 #[no_mangle]
 pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
     memory_manager::gc_poll(&SINGLETON, tls);
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
+    if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
+        return false;
+    }
+    memory_manager::pin_object(object)
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
+    if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
+        return false;
+    }
+    memory_manager::unpin_object(object)
+}
+
+#[no_mangle]
+pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {
+    memory_manager::is_pinned(object)
 }

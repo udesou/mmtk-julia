@@ -18,12 +18,8 @@ pub(crate) const LOGGING_SIDE_METADATA_SPEC: VMGlobalLogBitSpec =
 pub(crate) const MARKING_METADATA_SPEC: VMLocalMarkBitSpec =
     VMLocalMarkBitSpec::side_after(LOS_METADATA_SPEC.as_spec());
 
-// pub(crate) const LOCAL_FORWARDING_POINTER_METADATA_SPEC: VMLocalForwardingPointerSpec =
-//     VMLocalForwardingPointerSpec::side_after(MARKING_METADATA_SPEC.as_spec());
-
-// pub(crate) const LOCAL_FORWARDING_METADATA_BITS_SPEC: VMLocalForwardingBitsSpec =
-//     VMLocalForwardingBitsSpec::side_after(LOCAL_FORWARDING_POINTER_METADATA_SPEC.as_spec());
-
+pub(crate) const LOCAL_PINNING_METADATA_BITS_SPEC: VMLocalPinningBitSpec =
+    VMLocalPinningBitSpec::side_after(MARKING_METADATA_SPEC.as_spec());
 
 pub(crate) const BI_MARKING_METADATA_SPEC: SideMetadataSpec =
 SideMetadataSpec {
@@ -54,6 +50,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     const LOCAL_FORWARDING_BITS_SPEC: VMLocalForwardingBitsSpec = VMLocalForwardingBitsSpec::in_header(0);
     const LOCAL_MARK_BIT_SPEC: VMLocalMarkBitSpec = MARKING_METADATA_SPEC;
     const LOCAL_LOS_MARK_NURSERY_SPEC: VMLocalLOSMarkNurserySpec = LOS_METADATA_SPEC;
+    const LOCAL_PINNING_BIT_SPEC: VMLocalPinningBitSpec = LOCAL_PINNING_METADATA_BITS_SPEC;
 
     fn copy(
         _from: ObjectReference,
