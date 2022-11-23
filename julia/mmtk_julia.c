@@ -895,6 +895,36 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
     return;
 }
 
+void update_inlined_array(void* from, void* to) {
+    jl_value_t* jl_from = (jl_value_t*) from;
+    jl_value_t* jl_to = (jl_value_t*) to;
+
+    uintptr_t tag_to = (uintptr_t)jl_typeof(jl_to);
+    jl_datatype_t *vt = (jl_datatype_t*)tag_to;
+
+    // if(vt != 0 && vt != jl_buff_tag) {
+    //     const char *type_name = jl_typeof_str((jl_value_t*)from);
+    //     FILE *fp;
+    //     fp = fopen("/home/eduardo/mmtk-julia/copied_objs.log", "a");
+    //     fprintf(fp, "\ttype = %s\n", type_name);
+    //     fflush(fp);
+    //     fclose(fp); 
+    // }
+
+    if(vt->name == jl_array_typename) {
+        jl_array_t *a = (jl_array_t*)jl_from;
+        jl_array_t *b = (jl_array_t*)jl_to;
+        if (a->flags.how == 0) {
+            if (object_is_managed_by_mmtk(a->data)) {
+                size_t pre_data_bytes = ((size_t)a->data - a->offset*a->elsize) - (size_t)a;
+                if (pre_data_bytes > 0 && pre_data_bytes <= ARRAY_INLINE_NBYTES) {
+                    b->data = (void*)((size_t) b + pre_data_bytes);
+                }
+            }
+        }
+    }
+}
+
 // number of stacks to always keep available per pool - from gc-stacks.c
 #define MIN_STACK_MAPPINGS_PER_POOL 5
 
@@ -982,5 +1012,5 @@ void mmtk_sweep_stack_pools(void)
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, mmtk_sweep_stack_pools
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, update_inlined_array,  mmtk_sweep_stack_pools
                              };

@@ -101,6 +101,7 @@ typedef struct {
     void (* sweep_malloced_array) (void);
     signed char (* wait_in_a_safepoint) (void);
     void (* exit_from_safepoint) (signed char old_state);
+    void (* update_inlined_array) (void* from, void* to);
     void (* mmtk_sweep_stack_pools) (void);
 } Julia_Upcalls;
 
