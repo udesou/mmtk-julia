@@ -58,7 +58,7 @@ impl Collection<JuliaVM> for VMCollection {
                 BI_METADATA_END_ALIGNED_UP - BI_METADATA_START_ALIGNED_DOWN,
             )
         }
-
+        
         info!(
             "Live bytes = {}, free bytes = {}, total bytes = {}",
             crate::api::used_bytes(),

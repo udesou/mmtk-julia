@@ -19,7 +19,7 @@ typedef void* (*TraceSlotFn)(void* slot, long offset);
 typedef void* (*TraceObjFn)(void* obj, bool scan_obj);
 typedef void* (*ScanObjFn)(void* obj);
 typedef void* (*DispatchScnObjFn)(void** vec, int len, int cap, int final, closure_pointer closure);
-typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot);
+typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot, void* orig_obj, const char *type_name, void * vt);
 typedef void* (*ProcessOffsetEdgeFn)(closure_pointer closure, void* slot, int offset);
 
 /**
@@ -53,7 +53,9 @@ extern bool is_live_object(void* ref);
 extern bool is_mapped_object(void* ref);
 extern bool is_mapped_address(void* addr);
 extern void modify_check(void* ref);
-extern int object_is_managed_by_mmtk(void* addr);
+extern unsigned char object_is_managed_by_mmtk(void* addr);
+extern unsigned char mmtk_pin_object(void* obj);
+extern bool mmtk_is_pinned(void* obj);
 
 
 
@@ -102,6 +104,7 @@ typedef struct {
     signed char (* wait_in_a_safepoint) (void);
     void (* exit_from_safepoint) (signed char old_state);
     void (* update_inlined_array) (void* from, void* to);
+    void (* collect_stack_roots) (void* obj);
     void (* mmtk_sweep_stack_pools) (void);
 } Julia_Upcalls;
 
@@ -124,6 +127,8 @@ extern void run_finalizers_for_obj(void* obj);
 extern void mmtk_run_finalizers(bool at_exit);
 extern void mmtk_gc_poll(void *tls);
 extern void add_object_to_mmtk_roots(void* obj);
+extern void add_object_to_mmtk_task_roots(void* obj);
+extern void add_object_to_mmtk_red_roots(void* obj);
 
 /**
  * VM Accounting

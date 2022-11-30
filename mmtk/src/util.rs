@@ -1,5 +1,6 @@
 use crate::api::{start_control_collector, start_worker};
-use crate::JuliaVM;
+use crate::{JuliaVM, TASK_ROOTS, RED_ROOTS};
+use crate::julia_scanning::{mmtk_jl_typeof, jl_task_type};
 use crate::{JULIA_HEADER_SIZE, ROOTS};
 use enum_map::Enum;
 use mmtk::scheduler::{GCController, GCWorker};
@@ -59,6 +60,22 @@ pub extern "C" fn start_spawned_controller_thread(
 pub extern "C" fn add_object_to_mmtk_roots(addr: Address) {
     // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
     ROOTS.lock().unwrap().insert(addr);
+    if unsafe { Address::to_ptr(mmtk_jl_typeof(addr)) == jl_task_type } {
+        TASK_ROOTS.lock().unwrap().insert(addr);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn add_object_to_mmtk_task_roots(addr: Address) {
+    if unsafe { Address::to_ptr(mmtk_jl_typeof(addr)) == jl_task_type } {
+        TASK_ROOTS.lock().unwrap().insert(addr);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn add_object_to_mmtk_red_roots(addr: Address) {
+    // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
+    RED_ROOTS.lock().unwrap().insert(addr);
 }
 
 #[inline(always)]

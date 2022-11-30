@@ -1,9 +1,18 @@
+use crate::RED_ROOTS;
+use crate::TASK_ROOTS;
+use crate::api::mmtk_pin_object;
 use crate::edges::JuliaVMEdge;
+use crate::julia_scanning::jl_task_type;
+use crate::julia_scanning::mmtk_jl_typeof;
 #[cfg(feature = "scan_obj_c")]
 use crate::julia_scanning::process_edge;
 #[cfg(feature = "scan_obj_c")]
 use crate::julia_scanning::process_offset_edge;
+use crate::julia_types::mmtk_jl_datatype_layout_t;
+use crate::julia_types::mmtk_jl_datatype_t;
+use crate::julia_types::mmtk_jl_task_t;
 use crate::object_model::BI_MARKING_METADATA_SPEC;
+use crate::reference_glue::jl_nothing;
 use crate::{ROOTS, SINGLETON, UPCALLS};
 use mmtk::memory_manager;
 use mmtk::scheduler::*;
@@ -26,8 +35,38 @@ use std::sync::MutexGuard;
 pub struct VMScanning {}
 
 impl Scanning<JuliaVM> for VMScanning {
-    fn scan_thread_roots(_tls: VMWorkerThread, _factory: impl RootsWorkFactory<JuliaVMEdge>) {
-        // Thread roots are collected by Julia before stopping the world
+    fn scan_vm_immovable_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<<JuliaVM as VMBinding>::VMEdge>) {
+        // scan immovable roots
+        let mut roots: MutexGuard<HashSet<Address>> = TASK_ROOTS.lock().unwrap();
+        info!("{} task roots", roots.len());
+
+        unsafe { process_stack_roots(roots.drain().collect()) } ;
+
+        let mut red_roots: MutexGuard<HashSet<Address>> = RED_ROOTS.lock().unwrap();
+        let mut roots_to_scan = vec![];
+
+        for obj in red_roots.drain() {
+            let obj_ref = unsafe {obj.to_object_reference()};
+            roots_to_scan.push(obj_ref);
+        }
+
+        factory.create_process_node_roots_work(roots_to_scan);
+    }
+
+    fn scan_thread_roots(_tls: VMWorkerThread, mut factory: impl RootsWorkFactory<JuliaVMEdge>) {
+        let mut roots: MutexGuard<HashSet<Address>> = ROOTS.lock().unwrap();
+        info!("{} thread roots", roots.len());
+
+        let mut roots_to_scan = vec![];
+
+        // roots may contain mmtk objects
+        for obj in roots.drain() {
+            let obj_ref = unsafe {obj.to_object_reference()};
+            mmtk_pin_object(obj_ref);
+            roots_to_scan.push(obj_ref);          
+        }
+
+        factory.create_process_node_roots_work(roots_to_scan);
     }
 
     fn scan_thread_root(
@@ -39,19 +78,8 @@ impl Scanning<JuliaVM> for VMScanning {
     }
     fn scan_vm_specific_roots(
         _tls: VMWorkerThread,
-        mut factory: impl RootsWorkFactory<JuliaVMEdge>,
+        _factory: impl RootsWorkFactory<JuliaVMEdge>,
     ) {
-        let mut roots: MutexGuard<HashSet<Address>> = ROOTS.lock().unwrap();
-        info!("{} thread roots", roots.len());
-
-        let mut roots_to_scan = vec![];
-
-        // roots may contain mmtk objects
-        for obj in roots.drain() {
-            roots_to_scan.push(unsafe { obj.to_object_reference() });
-        }
-
-        factory.create_process_node_roots_work(roots_to_scan);
     }
 
     fn scan_object<EV: EdgeVisitor<JuliaVMEdge>>(
@@ -77,6 +105,56 @@ impl Scanning<JuliaVM> for VMScanning {
     fn prepare_for_roots_re_scanning() {
         unimplemented!()
     }
+}
+
+unsafe fn process_stack_roots(mut roots : Vec<Address>) {
+    let mut processed_roots = HashSet::new();
+
+    while !roots.is_empty() {
+        let root = roots.pop().unwrap();
+        processed_roots.insert(root);
+
+        let root_type = mmtk_jl_typeof(root);
+        assert_eq!(root_type, Address::from_ptr(jl_task_type));
+        let ta = root.to_ptr::<mmtk_jl_task_t>();
+
+        let next = (*ta).next;
+        if next != Address::from_mut_ptr(jl_nothing).to_mut_ptr() {
+            let next_addr = Address::from_mut_ptr(next);
+            let next_task_type = mmtk_jl_typeof(next_addr);
+            assert_eq!(next_task_type, Address::from_ptr(jl_task_type));
+            if !processed_roots.contains(&next_addr) {
+                roots.push(next_addr);
+            }
+        }
+
+        let queue = (*ta).queue;
+        if queue != Address::from_mut_ptr(jl_nothing).to_mut_ptr() {
+            let queue_addr = Address::from_mut_ptr(queue);
+            let obj_type_addr = mmtk_jl_typeof(queue_addr);
+            let obj_type = obj_type_addr.to_ptr::<mmtk_jl_datatype_t>();
+            let layout = (*obj_type).layout;
+            let npointers = (*layout).npointers;
+            let layout_fields = Address::from_ptr(layout) + std::mem::size_of::<mmtk_jl_datatype_layout_t>();
+            let fielddesc_size = 2 << (*layout).fielddesc_type();
+            let obj8_start_addr = layout_fields + fielddesc_size * (*layout).nfields as usize;
+            let obj8_end_addr = obj8_start_addr + npointers as usize;
+            for elem_usize in obj8_start_addr.as_usize()..obj8_end_addr.as_usize() {
+                let elem = queue_addr.to_mut_ptr::<*mut libc::c_uchar>();
+                let index = Address::from_usize(elem_usize).to_mut_ptr::<libc::c_uchar>();
+                let slot: *mut libc::c_uchar = &mut *elem.offset(*index as isize) as *mut *mut libc::c_uchar as *mut libc::c_uchar;
+                let queued_task = Address::from_mut_ptr(slot).load::<Address>();
+                if !processed_roots.contains(&queued_task) {
+                    let queued_task_type = mmtk_jl_typeof(queued_task);
+                    assert_eq!(queued_task_type, Address::from_ptr(jl_task_type));
+                    roots.push(queued_task);
+                }
+            }
+        }
+
+        ((*UPCALLS).collect_stack_roots)(root);
+    }
+
 }
 
 pub fn process_object(object: ObjectReference, closure: &mut dyn EdgeVisitor<JuliaVMEdge>) {

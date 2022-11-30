@@ -169,14 +169,14 @@ pub extern "C" fn initialize_collection(tls: VMThread) {
 
 #[no_mangle]
 pub extern "C" fn enable_collection() {
-    AtomicBool::store(&DISABLED_GC, false, Ordering::SeqCst);
     memory_manager::enable_collection(&SINGLETON);
+    AtomicBool::store(&DISABLED_GC, false, Ordering::SeqCst);
 }
 
 #[no_mangle]
 pub extern "C" fn disable_collection() {
-    AtomicBool::store(&DISABLED_GC, true, Ordering::SeqCst);
     memory_manager::disable_collection(&SINGLETON);
+    AtomicBool::store(&DISABLED_GC, true, Ordering::SeqCst);
 
     if AtomicBool::load(&FINALIZERS_RUNNING, Ordering::SeqCst) {
         return;
@@ -273,6 +273,9 @@ pub extern "C" fn register_finalizer(
     finalizer_fn: Address,
     is_obj_ptr: bool,
 ) {
+    if object_is_managed_by_mmtk(finalizer_fn.as_usize()) {
+        mmtk_pin_object(unsafe { finalizer_fn.to_object_reference() });
+    }
     memory_manager::add_finalizer(
         &SINGLETON,
         JuliaFinalizableObject(obj, finalizer_fn, is_obj_ptr),
@@ -421,13 +424,13 @@ pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
     memory_manager::pin_object(object)
 }
 
-#[no_mangle]
-pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
-    if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
-        return false;
-    }
-    memory_manager::unpin_object(object)
-}
+// #[no_mangle]
+// pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
+//     if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
+//         return false;
+//     }
+//     memory_manager::unpin_object(object)
+// }
 
 #[no_mangle]
 pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {

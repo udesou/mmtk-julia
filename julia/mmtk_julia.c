@@ -462,8 +462,7 @@ static void queue_roots(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp)
     add_object_to_mmtk_roots(jl_emptytuple_type);
     if (cmpswap_names != NULL)
         add_object_to_mmtk_roots(cmpswap_names);
-    add_object_to_mmtk_roots(jl_global_roots_table);
-
+    add_object_to_mmtk_red_roots(jl_global_roots_table);
 }
 
 static void jl_gc_queue_bt_buf_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp, jl_ptls_t ptls2)
@@ -483,8 +482,94 @@ static void jl_gc_queue_bt_buf_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_
     }
 }
 
+// Handle the case where the stack is only partially copied.
+static inline uintptr_t mmtk_gc_get_stack_addr(void *_addr, uintptr_t offset,
+                                          uintptr_t lb, uintptr_t ub)
+{
+    uintptr_t addr = (uintptr_t)_addr;
+    if (addr >= lb && addr < ub)
+        return addr + offset;
+    return addr;
+}
+
+static inline uintptr_t mmtk_gc_read_stack(void *_addr, uintptr_t offset,
+                                      uintptr_t lb, uintptr_t ub)
+{
+    uintptr_t real_addr = mmtk_gc_get_stack_addr(_addr, offset, lb, ub);
+    return *(uintptr_t*)real_addr;
+}
+
+JL_DLLEXPORT void collect_stack_roots(void* obj) {
+    jl_task_t *ta = (jl_task_t*)obj;
+    void *stkbuf = ta->stkbuf;
+    jl_gcframe_t *s = ta->gcstack;
+    size_t nroots;
+    uintptr_t offset = 0;
+    uintptr_t lb = 0;
+    uintptr_t ub = (uintptr_t)-1;
+#ifdef COPY_STACKS
+    if (stkbuf && ta->copy_stack && ta->ptls == NULL) {
+        assert(ta->tid >= 0);
+        jl_ptls_t ptls2 = jl_all_tls_states[ta->tid];
+        ub = (uintptr_t)ptls2->stackbase;
+        lb = ub - ta->copy_stack;
+        offset = (uintptr_t)stkbuf - lb;
+    }
+#endif
+    if (s) { // inlining label `stack` from mark_loop
+        nroots = mmtk_gc_read_stack(&s->nroots, offset, lb, ub);
+        assert(nroots <= UINT32_MAX);
+        gc_mark_stackframe_t stack = {s, 0, (uint32_t)nroots, offset, lb, ub};
+        jl_gcframe_t *s = stack.s;
+        uint32_t i = stack.i;
+        uint32_t nroots = stack.nroots;
+        uintptr_t offset = stack.offset;
+        uintptr_t lb = stack.lb;
+        uintptr_t ub = stack.ub;
+        uint32_t nr = nroots >> 2;
+        jl_value_t *new_obj = NULL;
+        while (1) {
+            jl_value_t ***rts = (jl_value_t***)(((void**)s) + 2);
+            for (; i < nr; i++) {
+                if (nroots & 1) {
+                    void **slot = (void**)mmtk_gc_read_stack(&rts[i], offset, lb, ub);
+                    uintptr_t real_addr = mmtk_gc_get_stack_addr(slot, offset, lb, ub);
+                    new_obj = (jl_value_t *) *(uintptr_t*)real_addr;
+                    if (new_obj) {
+                        add_object_to_mmtk_red_roots(new_obj);
+                    }
+                }
+                else {
+                    uintptr_t real_addr = mmtk_gc_get_stack_addr(&rts[i], offset, lb, ub);
+                    new_obj = (jl_value_t *) *(uintptr_t*)real_addr;
+                    if (new_obj) {
+                        add_object_to_mmtk_red_roots(new_obj);
+                    }
+                }
+            }
+
+            s = (jl_gcframe_t*)mmtk_gc_read_stack(&s->prev, offset, lb, ub);
+            if (s != 0) {
+                stack.s = s;
+                i = 0;
+                uintptr_t new_nroots = mmtk_gc_read_stack(&s->nroots, offset, lb, ub);
+                assert(new_nroots <= UINT32_MAX);
+                nroots = stack.nroots = (uint32_t)new_nroots;
+                nr = nroots >> 2;
+                continue;
+            }
+            break;
+        }
+    }
+}
+
 static void jl_gc_queue_thread_local_mmtk(jl_gc_mark_cache_t *gc_cache, jl_gc_mark_sp_t *sp, jl_ptls_t ptls2)
 {
+    for(int i = 0; i < ptls2->heap.live_tasks.len; i++) {
+        collect_stack_roots((jl_value_t*)ptls2->heap.live_tasks.items[i]);
+    }
+
+    add_object_to_mmtk_roots(jl_current_task);
     add_object_to_mmtk_roots(ptls2->current_task);
     add_object_to_mmtk_roots(ptls2->root_task);
     if (ptls2->next_task) {
@@ -540,31 +625,17 @@ void calculate_roots(void* ptls)
     queue_roots(gc_cache, &sp);
 }
 
-// Handle the case where the stack is only partially copied.
-static inline uintptr_t mmtk_gc_get_stack_addr(void *_addr, uintptr_t offset,
-                                          uintptr_t lb, uintptr_t ub)
-{
-    uintptr_t addr = (uintptr_t)_addr;
-    if (addr >= lb && addr < ub)
-        return addr + offset;
-    return addr;
-}
-
-static inline uintptr_t mmtk_gc_read_stack(void *_addr, uintptr_t offset,
-                                      uintptr_t lb, uintptr_t ub)
-{
-    uintptr_t real_addr = mmtk_gc_get_stack_addr(_addr, offset, lb, ub);
-    return *(uintptr_t*)real_addr;
-}
-
 JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, ProcessEdgeFn process_edge) {
+    uintptr_t tag = (uintptr_t)jl_typeof(obj);
+    jl_datatype_t *vt = (jl_datatype_t*)tag; // type of obj
+
+    assert(vt == jl_task_type);
     jl_task_t *ta = (jl_task_t*)obj;
 
+    const char *type_name = jl_typeof_str((jl_value_t*)obj);
+
     if (ta->excstack) { // inlining label `excstack` from mark_loop
-        // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
-        if (object_is_managed_by_mmtk(ta->excstack)) {
-            process_edge(closure, &ta->excstack);
-        }
+        process_edge(closure, &ta->excstack, obj, type_name, vt);
         jl_excstack_t *excstack = ta->excstack;
         size_t itr = ta->excstack->top;
         size_t bt_index = 0;
@@ -582,7 +653,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
                 while (jlval_index < njlvals) {
                     jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                     jlval_index += 1;
-                    process_edge(closure, new_obj_edge);
+                    process_edge(closure, new_obj_edge, obj, type_name, vt);
                 }
                 jlval_index = 0;
             }
@@ -593,7 +664,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
             itr = jl_excstack_next(excstack, itr);
             bt_index = 0;
             jlval_index = 0;
-            process_edge(closure, stack_obj_edge);
+            process_edge(closure, stack_obj_edge, obj, type_name, vt);
         }
     }
 }
@@ -629,13 +700,15 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         return;
     };
 
+    const char *type_name = jl_typeof_str((jl_value_t*)obj);
+
     if (vt == jl_simplevector_type) { // scanning a jl_simplevector_type object (inlining label `objarray_loaded` from mark_loop)
         size_t l = jl_svec_len(obj);
         jl_value_t **data = jl_svec_data(obj);
         jl_value_t **objary_begin = data;
         jl_value_t **objary_end = data + l;
         for (; objary_begin < objary_end; objary_begin += 1) {
-            process_edge(closure, objary_begin);
+            process_edge(closure, objary_begin, obj, type_name, vt);
         }
     } else if (vt->name == jl_array_typename) { // scanning a jl_array_typename object
         jl_array_t *a = (jl_array_t*)obj;
@@ -649,7 +722,15 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             // should be processed below if it contains pointers
         } else if (flags.how == 3) { // has a pointer to the object that owns the data
             jl_value_t **owner_addr = jl_array_data_owner_addr(a);
-            process_edge(closure, owner_addr);
+            long offset = (uintptr_t)a->data - (uintptr_t)*owner_addr;
+            if(object_is_managed_by_mmtk(a->data) && !object_is_managed_by_mmtk(*owner_addr)) {
+                printf("a->data = %p, a = %p, *owner = %p\n", a->data, a, *owner_addr);
+                fflush(stdout);
+            }
+            if (object_is_managed_by_mmtk(a->data) && object_is_managed_by_mmtk(*owner_addr)) {
+                process_offset_edge(closure, &a->data, offset);
+            }
+            process_edge(closure, owner_addr, obj, type_name, vt);
             return;
         }
         if (a->data == NULL || jl_array_len(a) == 0) {
@@ -662,7 +743,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             jl_value_t** objary_end = objary_begin + l;
 
             for (; objary_begin < objary_end; objary_begin++) {
-                process_edge(closure, objary_begin);
+                process_edge(closure, objary_begin, obj, type_name, vt);
             }
         } else if (flags.hasptr) { // inlining label `objarray_loaded` from mark_loop
             jl_datatype_t *et = (jl_datatype_t*)jl_tparam0(vt);
@@ -678,7 +759,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             if (npointers == 1) { // inlining label `objarray_loaded` from mark_loop
                 objary_begin += layout->first_ptr;
                 for (; objary_begin < objary_end; objary_begin+=elsize) {
-                    process_edge(closure, objary_begin);
+                    process_edge(closure, objary_begin, obj, type_name, vt);
                 }
             } else if (layout->fielddesc_type == 0) { // inlining label `array8_loaded` from mark_loop
                 obj8_begin = (uint8_t*)jl_dt_layout_ptrs(layout);
@@ -692,12 +773,13 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 for (; begin < end; begin += elsize) {
                     for (; elem_begin < elem_end; elem_begin++) {
                         jl_value_t **slot = &begin[*elem_begin];
-                        process_edge(closure, slot);
+                        process_edge(closure, slot, obj, type_name, vt);
                     }
                     elem_begin = obj8_begin;
                 }
             } else {
-                assert(0 && "unimplemented");
+                printf("UNIMPLEMENTED FOR FIELD DESC ARRAY!!!!");
+                fflush(stdout);
             }
         } else { 
             return;
@@ -714,29 +796,25 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             jl_binding_t *b = *begin;
             if (b == (jl_binding_t*)HT_NOTFOUND)
                 continue;
-
-            process_edge(closure, begin);
+            process_edge(closure, begin, obj, type_name, vt);
             
             void *vb = jl_astaggedvalue(b);
             verify_parent1("module", binding->parent, &vb, "binding_buff");
             (void)vb;
 
-            process_edge(closure, &b->value);
-            process_edge(closure, &b->globalref);
-            process_edge(closure, &b->owner);
-            process_edge(closure, &b->ty);
+            process_edge(closure, &b->value, obj, type_name, vt);
+            process_edge(closure, &b->globalref, obj, type_name, vt);
+            process_edge(closure, &b->owner, obj, type_name, vt);
+            process_edge(closure, &b->ty, obj, type_name, vt);
         }
         jl_module_t *parent = binding.parent;
-        process_edge(closure, &parent->parent);
+        process_edge(closure, &parent->parent, obj, type_name, vt);
 
         size_t nusings = m->usings.len;
         if (nusings) {
-            jl_value_t **objary_begin = (jl_value_t**)m->usings.items;
-            jl_value_t **objary_end = objary_begin + nusings;
-
-            for (; objary_begin < objary_end; objary_begin += 1) {
-                jl_value_t *pnew_obj = *objary_begin;
-                process_edge(closure, pnew_obj);
+            size_t i;
+            for (i = 0; i < m->usings.len; i++) {
+                process_edge(closure, &m->usings.items[i], obj, type_name, vt);
             }
         }
     } else if (vt == jl_task_type) { // scanning a jl_task_type object
@@ -744,7 +822,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         void *stkbuf = ta->stkbuf;
 #ifdef COPY_STACKS
         if (stkbuf && ta->copy_stack && object_is_managed_by_mmtk(ta->stkbuf))
-            process_edge(closure, &ta->stkbuf);
+            process_edge(closure, &ta->stkbuf, obj, type_name, vt);
 #endif
         jl_gcframe_t *s = ta->gcstack;
         size_t nroots;
@@ -770,18 +848,18 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             uintptr_t offset = stack.offset;
             uintptr_t lb = stack.lb;
             uintptr_t ub = stack.ub;
-            uint32_t nr = nroots >> 2;
+            uint32_t nr = nroots >> 3;
             while (1) {
                 jl_value_t ***rts = (jl_value_t***)(((void**)s) + 2);
                 for (; i < nr; i++) {
                     if (nroots & 1) {
                         void **slot = (void**)mmtk_gc_read_stack(&rts[i], offset, lb, ub);
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(slot, offset, lb, ub);
-                        process_edge(closure, (void*)real_addr);
+                        process_edge(closure, (void*)real_addr, obj, type_name, vt);
                     }
                     else {
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(&rts[i], offset, lb, ub);
-                        process_edge(closure, (void*)real_addr);
+                        process_edge(closure, (void*)real_addr, obj, type_name, vt);
                     }
                 }
 
@@ -792,7 +870,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     uintptr_t new_nroots = mmtk_gc_read_stack(&s->nroots, offset, lb, ub);
                     assert(new_nroots <= UINT32_MAX);
                     nroots = stack.nroots = (uint32_t)new_nroots;
-                    nr = nroots >> 2;
+                    nr = nroots >> 3;
                     continue;
                 }
                 break;
@@ -800,9 +878,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         }
         if (ta->excstack) { // inlining label `excstack` from mark_loop
             // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
-            if (object_is_managed_by_mmtk(ta->excstack)) {
-                process_edge(closure, &ta->excstack);
-            }
+            process_edge(closure, &ta->excstack, obj, type_name, vt);
             jl_excstack_t *excstack = ta->excstack;
             size_t itr = ta->excstack->top;
             size_t bt_index = 0;
@@ -820,18 +896,17 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     while (jlval_index < njlvals) {
                         jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                         jlval_index += 1;
-                        process_edge(closure, new_obj_edge);
+                        process_edge(closure, new_obj_edge, obj, type_name, vt);
                     }
                     jlval_index = 0;
                 }
 
                 jl_bt_element_t *stack_raw = (jl_bt_element_t *)(excstack+1);
                 jl_value_t** stack_obj_edge = &stack_raw[itr-1].jlvalue;
-
                 itr = jl_excstack_next(excstack, itr);
                 bt_index = 0;
                 jlval_index = 0;
-                process_edge(closure, stack_obj_edge);
+                process_edge(closure, stack_obj_edge, obj, type_name, vt);
             }
         }
         const jl_datatype_layout_t *layout = jl_task_type->layout; // inlining label `obj8_loaded` from mark_loop 
@@ -843,7 +918,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         (void)jl_assume(obj8_begin < obj8_end);
         for (; obj8_begin < obj8_end; obj8_begin++) {
             jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-            process_edge(closure, slot);
+            process_edge(closure, slot, obj, type_name, vt);
         }
     } else if (vt == jl_string_type) { // scanning a jl_string_type object
         return;
@@ -860,14 +935,14 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             if (layout->fielddesc_type == 0) { // inlining label `obj8_loaded` from mark_loop 
                 uint8_t *obj8_begin;
                 uint8_t *obj8_end;
-
+                
                 obj8_begin = (uint8_t*)jl_dt_layout_ptrs(layout);
                 obj8_end = obj8_begin + npointers;
 
                 (void)jl_assume(obj8_begin < obj8_end);
                 for (; obj8_begin < obj8_end; obj8_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-                    process_edge(closure, slot);
+                    process_edge(closure, slot, obj, type_name, vt);
                 }
             }
             else if(layout->fielddesc_type == 1) { // inlining label `obj16_loaded` from mark_loop 
@@ -878,16 +953,19 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 obj16_end = obj16_begin + npointers;
                 for (; obj16_begin < obj16_end; obj16_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj16_begin];
-                    process_edge(closure, slot);
+                    process_edge(closure, slot, obj, type_name, vt);
                 }
             }
             else if (layout->fielddesc_type == 2) {
                 // FIXME: scan obj32
-                assert(0 && "unimplemented for obj32");
+                printf("UNIMPLEMENTED FOR OBJ32\n");
+                fflush(stdout);
             }
             else {
                 // simply dispatch the work at the end of the function
                 assert(layout->fielddesc_type == 3);
+                printf("UNIMPLEMENTED FOR layout->fielddesc_type == 3\n");
+                fflush(stdout);
             }
         }
     }
@@ -1012,5 +1090,5 @@ void mmtk_sweep_stack_pools(void)
 Julia_Upcalls mmtk_upcalls = { scan_julia_obj, scan_julia_exc_obj, get_stackbase, calculate_roots, run_finalizer_function, get_jl_last_err, set_jl_last_err, get_lo_size,
                                get_so_size, get_obj_start_ref, wait_for_the_world, set_gc_initial_state, set_gc_final_state, set_gc_old_state, mmtk_jl_run_finalizers,
                                jl_throw_out_of_memory_error, mark_object_as_scanned, object_has_been_scanned, mmtk_sweep_malloced_arrays,
-                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, update_inlined_array,  mmtk_sweep_stack_pools
+                               mmtk_wait_in_a_safepoint, mmtk_exit_from_safepoint, update_inlined_array, collect_stack_roots, mmtk_sweep_stack_pools
                              };

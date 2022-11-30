@@ -102,6 +102,12 @@ lazy_static! {
     pub static ref ROOTS: Mutex<HashSet<Address>> = {
         Mutex::new(HashSet::new())
     };
+    pub static ref TASK_ROOTS: Mutex<HashSet<Address>> = {
+        Mutex::new(HashSet::new())
+    };
+    pub static ref RED_ROOTS: Mutex<HashSet<Address>> = {
+        Mutex::new(HashSet::new())
+    };
     pub static ref MUTATOR_TLS: RwLock<HashSet<String>> =
         RwLock::new(HashSet::new());
     pub static ref MUTATORS: RwLock<Vec<ObjectReference>> =
@@ -165,6 +171,7 @@ pub struct Julia_Upcalls {
     pub wait_in_a_safepoint: extern "C" fn() -> i8,
     pub exit_from_safepoint: extern "C" fn(old_state: i8),
     pub update_inlined_array: extern "C" fn(to: Address, from: Address),
+    pub collect_stack_roots: extern "C" fn(obj: Address),
     pub mmtk_sweep_stack_pools: extern "C" fn(),
 }
 
