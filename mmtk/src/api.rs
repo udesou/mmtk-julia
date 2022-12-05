@@ -2,6 +2,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use crate::reference_glue::JuliaFinalizableObject;
+#[cfg(feature = "object_pinning")]
 use crate::scanning::object_is_managed_by_mmtk;
 use crate::JuliaVM;
 use crate::Julia_Upcalls;
@@ -273,8 +274,9 @@ pub extern "C" fn register_finalizer(
     finalizer_fn: Address,
     is_obj_ptr: bool,
 ) {
+    #[cfg(feature = "object_pinning")]
     if object_is_managed_by_mmtk(finalizer_fn.as_usize()) {
-        mmtk_pin_object(unsafe { finalizer_fn.to_object_reference() });
+        mmtk_pin_object(ObjectReference::from_raw_address(finalizer_fn));
     }
     memory_manager::add_finalizer(
         &SINGLETON,
@@ -416,23 +418,26 @@ pub extern "C" fn mmtk_gc_poll(tls: VMMutatorThread) {
     memory_manager::gc_poll(&SINGLETON, tls);
 }
 
+#[cfg(feature = "object_pinning")]
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
-    if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
+    if !object_is_managed_by_mmtk(object.to_raw_address().as_usize()) {
         return false;
     }
-    memory_manager::pin_object(object)
+    memory_manager::pin_object::<JuliaVM>(object)
 }
 
-// #[no_mangle]
-// pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
-//     if !object_is_managed_by_mmtk(object.to_address().as_usize()) {
-//         return false;
-//     }
-//     memory_manager::unpin_object(object)
-// }
+#[cfg(feature = "object_pinning")]
+#[no_mangle]
+pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
+    if !object_is_managed_by_mmtk(object.to_raw_address().as_usize()) {
+        return false;
+    }
+    memory_manager::unpin_object::<JuliaVM>(object)
+}
 
+#[cfg(feature = "object_pinning")]
 #[no_mangle]
 pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {
-    memory_manager::is_pinned(object)
+    memory_manager::is_pinned::<JuliaVM>(object)
 }

@@ -19,7 +19,7 @@ typedef void* (*TraceSlotFn)(void* slot, long offset);
 typedef void* (*TraceObjFn)(void* obj, bool scan_obj);
 typedef void* (*ScanObjFn)(void* obj);
 typedef void* (*DispatchScnObjFn)(void** vec, int len, int cap, int final, closure_pointer closure);
-typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot, void* orig_obj, const char *type_name, void * vt);
+typedef void* (*ProcessEdgeFn)(closure_pointer closure, void* slot);
 typedef void* (*ProcessOffsetEdgeFn)(closure_pointer closure, void* slot, int offset);
 
 /**

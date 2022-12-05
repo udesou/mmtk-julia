@@ -1,5 +1,9 @@
+#[cfg(feature = "object_pinning")]
+use crate::api::mmtk_unpin_object;
 use crate::object_model::BI_MARKING_METADATA_SPEC;
 use crate::JuliaVM;
+#[cfg(feature = "object_pinning")]
+use crate::PINNED_ROOTS;
 use crate::{
     spawn_collector_thread, BI_METADATA_END_ALIGNED_UP, BI_METADATA_START_ALIGNED_DOWN, SINGLETON,
     UPCALLS,
@@ -7,8 +11,8 @@ use crate::{
 use log::{info, trace};
 use mmtk::memory_manager;
 use mmtk::util::alloc::AllocationError;
-use mmtk::util::opaque_pointer::*;
 use mmtk::util::Address;
+use mmtk::util::{opaque_pointer::*, ObjectReference};
 use mmtk::vm::{Collection, GCThreadContext};
 use mmtk::Mutator;
 use mmtk::MutatorContext;
@@ -45,6 +49,13 @@ impl Collection<JuliaVM> for VMCollection {
     }
 
     fn resume_mutators(_tls: VMWorkerThread) {
+        // unpin object roots
+        #[cfg(feature = "object_pinning")]
+        for obj in PINNED_ROOTS.write().unwrap().drain() {
+            let obj_ref = ObjectReference::from_raw_address(obj);
+            mmtk_unpin_object(obj_ref);
+        }
+
         unsafe {
             AtomicBool::store(&BLOCK_FOR_GC, false, Ordering::SeqCst);
             AtomicBool::store(&WORLD_HAS_STOPPED, false, Ordering::SeqCst);
@@ -58,7 +69,7 @@ impl Collection<JuliaVM> for VMCollection {
                 BI_METADATA_END_ALIGNED_UP - BI_METADATA_START_ALIGNED_DOWN,
             )
         }
-        
+
         info!(
             "Live bytes = {}, free bytes = {}, total bytes = {}",
             crate::api::used_bytes(),

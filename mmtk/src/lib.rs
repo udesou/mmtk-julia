@@ -118,6 +118,13 @@ lazy_static! {
         Arc::new((Mutex::new(0), Condvar::new()));
 }
 
+#[cfg(feature = "object_pinning")]
+lazy_static! {
+    // Pinned object roots
+    pub static ref PINNED_ROOTS: RwLock<HashSet<Address>> =
+        RwLock::new(HashSet::new());
+}
+
 #[link(name = "runtime_gc_c")]
 #[allow(improper_ctypes)]
 extern "C" {

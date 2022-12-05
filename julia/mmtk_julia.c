@@ -635,7 +635,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
     const char *type_name = jl_typeof_str((jl_value_t*)obj);
 
     if (ta->excstack) { // inlining label `excstack` from mark_loop
-        process_edge(closure, &ta->excstack, obj, type_name, vt);
+        process_edge(closure, &ta->excstack);
         jl_excstack_t *excstack = ta->excstack;
         size_t itr = ta->excstack->top;
         size_t bt_index = 0;
@@ -653,7 +653,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
                 while (jlval_index < njlvals) {
                     jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                     jlval_index += 1;
-                    process_edge(closure, new_obj_edge, obj, type_name, vt);
+                    process_edge(closure, new_obj_edge);
                 }
                 jlval_index = 0;
             }
@@ -664,7 +664,7 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj, closure_pointer closure, Process
             itr = jl_excstack_next(excstack, itr);
             bt_index = 0;
             jlval_index = 0;
-            process_edge(closure, stack_obj_edge, obj, type_name, vt);
+            process_edge(closure, stack_obj_edge);
         }
     }
 }
@@ -708,7 +708,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         jl_value_t **objary_begin = data;
         jl_value_t **objary_end = data + l;
         for (; objary_begin < objary_end; objary_begin += 1) {
-            process_edge(closure, objary_begin, obj, type_name, vt);
+            process_edge(closure, objary_begin);
         }
     } else if (vt->name == jl_array_typename) { // scanning a jl_array_typename object
         jl_array_t *a = (jl_array_t*)obj;
@@ -730,7 +730,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             if (object_is_managed_by_mmtk(a->data) && object_is_managed_by_mmtk(*owner_addr)) {
                 process_offset_edge(closure, &a->data, offset);
             }
-            process_edge(closure, owner_addr, obj, type_name, vt);
+            process_edge(closure, owner_addr);
             return;
         }
         if (a->data == NULL || jl_array_len(a) == 0) {
@@ -743,7 +743,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             jl_value_t** objary_end = objary_begin + l;
 
             for (; objary_begin < objary_end; objary_begin++) {
-                process_edge(closure, objary_begin, obj, type_name, vt);
+                process_edge(closure, objary_begin);
             }
         } else if (flags.hasptr) { // inlining label `objarray_loaded` from mark_loop
             jl_datatype_t *et = (jl_datatype_t*)jl_tparam0(vt);
@@ -759,7 +759,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             if (npointers == 1) { // inlining label `objarray_loaded` from mark_loop
                 objary_begin += layout->first_ptr;
                 for (; objary_begin < objary_end; objary_begin+=elsize) {
-                    process_edge(closure, objary_begin, obj, type_name, vt);
+                    process_edge(closure, objary_begin);
                 }
             } else if (layout->fielddesc_type == 0) { // inlining label `array8_loaded` from mark_loop
                 obj8_begin = (uint8_t*)jl_dt_layout_ptrs(layout);
@@ -773,7 +773,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 for (; begin < end; begin += elsize) {
                     for (; elem_begin < elem_end; elem_begin++) {
                         jl_value_t **slot = &begin[*elem_begin];
-                        process_edge(closure, slot, obj, type_name, vt);
+                        process_edge(closure, slot);
                     }
                     elem_begin = obj8_begin;
                 }
@@ -796,25 +796,25 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
             jl_binding_t *b = *begin;
             if (b == (jl_binding_t*)HT_NOTFOUND)
                 continue;
-            process_edge(closure, begin, obj, type_name, vt);
+            process_edge(closure, begin);
             
             void *vb = jl_astaggedvalue(b);
             verify_parent1("module", binding->parent, &vb, "binding_buff");
             (void)vb;
 
-            process_edge(closure, &b->value, obj, type_name, vt);
-            process_edge(closure, &b->globalref, obj, type_name, vt);
-            process_edge(closure, &b->owner, obj, type_name, vt);
-            process_edge(closure, &b->ty, obj, type_name, vt);
+            process_edge(closure, &b->value);
+            process_edge(closure, &b->globalref);
+            process_edge(closure, &b->owner);
+            process_edge(closure, &b->ty);
         }
         jl_module_t *parent = binding.parent;
-        process_edge(closure, &parent->parent, obj, type_name, vt);
+        process_edge(closure, &parent->parent);
 
         size_t nusings = m->usings.len;
         if (nusings) {
             size_t i;
             for (i = 0; i < m->usings.len; i++) {
-                process_edge(closure, &m->usings.items[i], obj, type_name, vt);
+                process_edge(closure, &m->usings.items[i]);
             }
         }
     } else if (vt == jl_task_type) { // scanning a jl_task_type object
@@ -822,7 +822,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         void *stkbuf = ta->stkbuf;
 #ifdef COPY_STACKS
         if (stkbuf && ta->copy_stack && object_is_managed_by_mmtk(ta->stkbuf))
-            process_edge(closure, &ta->stkbuf, obj, type_name, vt);
+            process_edge(closure, &ta->stkbuf);
 #endif
         jl_gcframe_t *s = ta->gcstack;
         size_t nroots;
@@ -855,11 +855,11 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     if (nroots & 1) {
                         void **slot = (void**)mmtk_gc_read_stack(&rts[i], offset, lb, ub);
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(slot, offset, lb, ub);
-                        process_edge(closure, (void*)real_addr, obj, type_name, vt);
+                        process_edge(closure, (void*)real_addr);
                     }
                     else {
                         uintptr_t real_addr = mmtk_gc_get_stack_addr(&rts[i], offset, lb, ub);
-                        process_edge(closure, (void*)real_addr, obj, type_name, vt);
+                        process_edge(closure, (void*)real_addr);
                     }
                 }
 
@@ -878,7 +878,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         }
         if (ta->excstack) { // inlining label `excstack` from mark_loop
             // if it is not managed by MMTk, nothing needs to be done because the object does not need to be scanned
-            process_edge(closure, &ta->excstack, obj, type_name, vt);
+            process_edge(closure, &ta->excstack);
             jl_excstack_t *excstack = ta->excstack;
             size_t itr = ta->excstack->top;
             size_t bt_index = 0;
@@ -896,7 +896,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                     while (jlval_index < njlvals) {
                         jl_value_t** new_obj_edge = &bt_entry[2 + jlval_index].jlvalue;
                         jlval_index += 1;
-                        process_edge(closure, new_obj_edge, obj, type_name, vt);
+                        process_edge(closure, new_obj_edge);
                     }
                     jlval_index = 0;
                 }
@@ -906,7 +906,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 itr = jl_excstack_next(excstack, itr);
                 bt_index = 0;
                 jlval_index = 0;
-                process_edge(closure, stack_obj_edge, obj, type_name, vt);
+                process_edge(closure, stack_obj_edge);
             }
         }
         const jl_datatype_layout_t *layout = jl_task_type->layout; // inlining label `obj8_loaded` from mark_loop 
@@ -918,7 +918,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
         (void)jl_assume(obj8_begin < obj8_end);
         for (; obj8_begin < obj8_end; obj8_begin++) {
             jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-            process_edge(closure, slot, obj, type_name, vt);
+            process_edge(closure, slot);
         }
     } else if (vt == jl_string_type) { // scanning a jl_string_type object
         return;
@@ -942,7 +942,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 (void)jl_assume(obj8_begin < obj8_end);
                 for (; obj8_begin < obj8_end; obj8_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj8_begin];
-                    process_edge(closure, slot, obj, type_name, vt);
+                    process_edge(closure, slot);
                 }
             }
             else if(layout->fielddesc_type == 1) { // inlining label `obj16_loaded` from mark_loop 
@@ -953,7 +953,7 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 obj16_end = obj16_begin + npointers;
                 for (; obj16_begin < obj16_end; obj16_begin++) {
                     jl_value_t **slot = &((jl_value_t**)obj)[*obj16_begin];
-                    process_edge(closure, slot, obj, type_name, vt);
+                    process_edge(closure, slot);
                 }
             }
             else if (layout->fielddesc_type == 2) {

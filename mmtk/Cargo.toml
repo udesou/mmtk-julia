@@ -23,9 +23,9 @@ built = "*"
 [dependencies]
 libc = "0.2"
 lazy_static = "1.1"
-# mmtk = { git = "https://github.com/udesou/mmtk-core.git", branch="feature/object-pinning", version = "*" }
+mmtk = { git = "https://github.com/udesou/mmtk-core.git", branch="feature/object-moving", version = "*" }
 # mmtk = { git = "https://github.com/mmtk/mmtk-core.git", branch="master", version = "*" }
-mmtk = { path = "/home/eduardo/mmtk-core", version="*" }
+# mmtk = { path = "/home/eduardo/mmtk-core", version="*" }
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_off"] }
 enum-map = "=2.1"
 atomic = "0.4.6"
@@ -38,5 +38,6 @@ gencopy = []
 marksweep = []
 pageprotect = []
 malloc_counted_size = ["mmtk/malloc_counted_size", ]
-immix = ["malloc_counted_size"]
+object_pinning = ["mmtk/object_pinning"]
+immix = ["malloc_counted_size", "object_pinning"]
 scan_obj_c = ["immix"]

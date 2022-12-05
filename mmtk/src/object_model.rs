@@ -49,6 +49,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         VMLocalForwardingBitsSpec::in_header(-64);
     const LOCAL_MARK_BIT_SPEC: VMLocalMarkBitSpec = MARKING_METADATA_SPEC;
     const LOCAL_LOS_MARK_NURSERY_SPEC: VMLocalLOSMarkNurserySpec = LOS_METADATA_SPEC;
+    #[cfg(feature = "object_pinning")]
     const LOCAL_PINNING_BIT_SPEC: VMLocalPinningBitSpec = LOCAL_PINNING_METADATA_BITS_SPEC;
 
     fn copy(
@@ -57,8 +58,9 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         copy_context: &mut GCWorkerCopyContext<JuliaVM>,
     ) -> ObjectReference {
         let bytes = Self::get_current_size(from);
-        let from_start_ref = unsafe { Self::object_start_ref(from).to_object_reference() };
-        let header_offset = from.to_address().as_usize() - from_start_ref.to_address().as_usize();
+        let from_start_ref = ObjectReference::from_raw_address(Self::ref_to_object_start(from));
+        let header_offset =
+            from.to_raw_address().as_usize() - from_start_ref.to_raw_address().as_usize();
 
         let dst = if header_offset == 8 {
             // regular object
@@ -70,18 +72,18 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             unimplemented!()
         };
 
-        let src = Self::object_start_ref(from);
+        let src = Self::ref_to_object_start(from);
         unsafe {
             std::ptr::copy_nonoverlapping::<u8>(src.to_ptr(), dst.to_mut_ptr(), bytes);
         }
-        let to_obj = unsafe { (dst + header_offset).to_object_reference() };
+        let to_obj = ObjectReference::from_raw_address(dst + header_offset);
         copy_context.post_copy(to_obj, bytes, semantics);
 
-        unsafe { ((*UPCALLS).update_inlined_array)(from.to_address(), to_obj.to_address()) }
+        unsafe { ((*UPCALLS).update_inlined_array)(from.to_raw_address(), to_obj.to_raw_address()) }
 
         // zero from_obj
         unsafe {
-            libc::memset(from_start_ref.to_address().to_mut_ptr(), 0, bytes);
+            libc::memset(from_start_ref.to_raw_address().to_mut_ptr(), 0, bytes);
         }
 
         Self::LOCAL_FORWARDING_BITS_SPEC.store_atomic::<JuliaVM, u8>(
@@ -129,17 +131,29 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         unimplemented!()
     }
 
-    fn object_start_ref(object: ObjectReference) -> Address {
+    #[inline(always)]
+    fn ref_to_object_start(object: ObjectReference) -> Address {
         let res = if is_object_in_los(&object) {
-            object.to_address() - 48
+            object.to_raw_address() - 48
         } else {
             unsafe { ((*UPCALLS).get_object_start_ref)(object) }
         };
         res
     }
 
+    #[inline(always)]
     fn ref_to_address(object: ObjectReference) -> Address {
-        object.to_address()
+        object.to_raw_address()
+    }
+
+    #[inline(always)]
+    fn address_to_ref(address: Address) -> ObjectReference {
+        ObjectReference::from_raw_address(address)
+    }
+
+    #[inline(always)]
+    fn ref_to_header(object: ObjectReference) -> Address {
+        object.to_raw_address()
     }
 
     fn dump_object(_object: ObjectReference) {
@@ -148,7 +162,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
 }
 
 pub fn is_object_in_los(object: &ObjectReference) -> bool {
-    (*object).to_address().as_usize() > 0x60000000000
+    (*object).to_raw_address().as_usize() > 0x60000000000
 }
 
 #[no_mangle]
