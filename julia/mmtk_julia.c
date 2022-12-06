@@ -314,7 +314,7 @@ void* get_obj_start_ref(void* obj)
     return obj_start_ref;
 }
 
-size_t get_so_size(void* obj) 
+size_t get_so_size(void* obj)
 {
     uintptr_t tag = (uintptr_t)jl_typeof(obj);
     jl_datatype_t *vt = (jl_datatype_t*)tag;
