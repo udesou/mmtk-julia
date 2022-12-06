@@ -18,6 +18,7 @@ pub(crate) const LOGGING_SIDE_METADATA_SPEC: VMGlobalLogBitSpec = VMGlobalLogBit
 pub(crate) const MARKING_METADATA_SPEC: VMLocalMarkBitSpec =
     VMLocalMarkBitSpec::side_after(LOS_METADATA_SPEC.as_spec());
 
+#[cfg(feature = "object_pinning")]
 pub(crate) const LOCAL_PINNING_METADATA_BITS_SPEC: VMLocalPinningBitSpec =
     VMLocalPinningBitSpec::side_after(MARKING_METADATA_SPEC.as_spec());
 
@@ -161,6 +162,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 }
 
+// FIXME: currently this is bound to MMTk's address space mapping - won't work if that mapping changes
 pub fn is_object_in_los(object: &ObjectReference) -> bool {
     (*object).to_raw_address().as_usize() > 0x60000000000
 }
