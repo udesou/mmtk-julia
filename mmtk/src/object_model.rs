@@ -50,6 +50,9 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         VMLocalForwardingBitsSpec::in_header(-64);
     const LOCAL_MARK_BIT_SPEC: VMLocalMarkBitSpec = MARKING_METADATA_SPEC;
     const LOCAL_LOS_MARK_NURSERY_SPEC: VMLocalLOSMarkNurserySpec = LOS_METADATA_SPEC;
+    const UNIFIED_OBJECT_REFERENCE_ADDRESS: bool = false;
+    const OBJECT_REF_OFFSET_LOWER_BOUND: isize = 0;
+
     #[cfg(feature = "object_pinning")]
     const LOCAL_PINNING_BIT_SPEC: VMLocalPinningBitSpec = LOCAL_PINNING_METADATA_BITS_SPEC;
 

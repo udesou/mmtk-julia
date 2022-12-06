@@ -105,7 +105,7 @@ pub extern "C" fn add_mutator_ref(mutator_ref: ObjectReference) {
 
 #[no_mangle]
 pub extern "C" fn destroy_mutator(mutator: *mut Mutator<JuliaVM>) {
-    memory_manager::destroy_mutator(unsafe { Box::from_raw(mutator) })
+    memory_manager::destroy_mutator(unsafe { &mut *mutator })
 }
 
 #[no_mangle]
