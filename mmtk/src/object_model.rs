@@ -1,4 +1,4 @@
-use crate::{init_boot_image_metadata_info, JuliaVM, UPCALLS};
+use crate::{init_boot_image_metadata_info, JuliaVM, UPCALLS, JULIA_HEADER_SIZE};
 use mmtk::util::constants::BYTES_IN_PAGE;
 use mmtk::util::copy::*;
 use mmtk::util::metadata::side_metadata::{
@@ -70,8 +70,10 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         let size = if is_object_in_los(&object) {
             unsafe { ((*UPCALLS).get_lo_size)(object) }
         } else {
-            let obj_size = unsafe { ((*UPCALLS).get_so_size)(object) };
-            obj_size
+            unsafe {
+                let addr_size = object.to_raw_address() - 2*JULIA_HEADER_SIZE;
+                addr_size.load::<u64>()
+            }   
         };
 
         size as usize
@@ -102,7 +104,9 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         let res = if is_object_in_los(&object) {
             object.to_raw_address() - 48
         } else {
-            unsafe { ((*UPCALLS).get_object_start_ref)(object) }
+            unsafe {
+                object.to_raw_address() - 2*JULIA_HEADER_SIZE
+            }
         };
         res
     }

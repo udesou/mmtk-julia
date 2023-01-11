@@ -53,14 +53,17 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default_llvm(int pool_offset, int osiz
 
     // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
     jl_taggedvalue_t *v_tagged =
-        (jl_taggedvalue_t *) alloc(ptls->mmtk_mutator_ptr, osize, 16, 8, 0);
+        (jl_taggedvalue_t *) alloc(ptls->mmtk_mutator_ptr, osize + sizeof(jl_taggedvalue_t), 16, 0, 0);
+
+    jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
+    v = jl_valueof(v_tagged_aligned);
 
     ptls->cursor = ptls->mmtk_mutator_ptr->allocators.immix[0].cursor;
     ptls->limit = ptls->mmtk_mutator_ptr->allocators.immix[0].limit;
 
-    v = jl_valueof(v_tagged);
+    // v = jl_valueof(v_tagged);
 
-    post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
 
@@ -96,19 +99,19 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     }
 
     jl_value_t *v;
-    if ((uintptr_t)ty != jl_buff_tag) {
-        // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-        jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *) alloc_default_object(ptls, osize, sizeof(jl_taggedvalue_t));
-        v = jl_valueof(v_tagged);
-        post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
-    } else {
+    // if ((uintptr_t)ty != jl_buff_tag) {
+    //     // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
+    //     jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *) alloc_default_object(ptls, osize, sizeof(jl_taggedvalue_t));
+    //     v = jl_valueof(v_tagged);
+    //     post_alloc(ptls->mmtk_mutator_ptr, v, osize, 0);
+    // } else {
         // allocating an extra word to store the size of buffer objects
         jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *) alloc_default_object(ptls, osize + sizeof(jl_taggedvalue_t), 0);
         jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
         v = jl_valueof(v_tagged_aligned);
-        store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
+        // store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
         post_alloc(ptls->mmtk_mutator_ptr, v, osize + sizeof(jl_taggedvalue_t), 0);
-    }
+    // }
     
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;

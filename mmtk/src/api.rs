@@ -8,6 +8,7 @@ use crate::Julia_Upcalls;
 use crate::FINALIZER_ROOTS;
 use crate::SINGLETON;
 use crate::UPCALLS;
+use crate::util::store_obj_size;
 use crate::{
     get_mutator_ref, set_julia_obj_header_size, ARE_MUTATORS_BLOCKED, BUILDER, DISABLED_GC,
     FINALIZERS_RUNNING, MUTATORS, MUTATOR_TLS, USER_TRIGGERED_GC,
@@ -175,6 +176,7 @@ pub extern "C" fn post_alloc(
             memory_manager::post_alloc::<JuliaVM>(unsafe { &mut *mutator }, refer, bytes, semantics)
         }
         _ => {
+            store_obj_size(refer, bytes);
             memory_manager::post_alloc::<JuliaVM>(unsafe { &mut *mutator }, refer, bytes, semantics)
         }
     }
