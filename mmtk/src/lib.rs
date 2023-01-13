@@ -75,6 +75,13 @@ extern "C" {
     pub static BI_METADATA_END_ALIGNED_UP: usize;
 }
 
+// hardcode variables for the cursor and limit offsets in ptls for the immix allocator
+#[no_mangle]
+pub static CURSOR_OFFSET: usize = 81896;
+
+#[no_mangle]
+pub static LIMIT_OFFSET: usize = 81904;
+
 #[no_mangle]
 pub static BLOCK_FOR_GC: AtomicBool = AtomicBool::new(false);
 
