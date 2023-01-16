@@ -405,23 +405,35 @@ void run_finalizer_function(void *o, void *ff, bool is_ptr)
 
 
 static inline void mmtk_jl_run_finalizers_in_list(bool at_exit) {
-    jl_task_t *ct = jl_current_task;
-    uint8_t sticky = ct->sticky;
     mmtk_run_finalizers(at_exit);
-    ct->sticky = sticky;
+}
+
+void mmtk_jl_run_pending_finalizers(void* ptls) {
+    if (!((jl_ptls_t)ptls)->in_finalizer && !((jl_ptls_t)ptls)->finalizers_inhibited && ((jl_ptls_t)ptls)->locks.len == 0) {
+        jl_task_t *ct = jl_current_task;
+        ((jl_ptls_t)ptls)->in_finalizer = 1;
+        uint64_t save_rngState[4];
+        memcpy(&save_rngState[0], &ct->rngState[0], sizeof(save_rngState));
+        jl_rng_split(ct->rngState, finalizer_rngState);
+        jl_atomic_store_relaxed(&jl_gc_have_pending_finalizers, 0);
+        mmtk_jl_run_finalizers_in_list(false);
+        memcpy(&ct->rngState[0], &save_rngState[0], sizeof(save_rngState));
+        ((jl_ptls_t)ptls)->in_finalizer = 0;
+    }
 }
 
 void mmtk_jl_run_finalizers(void* ptls) {
     // Only disable finalizers on current thread
     // Doing this on all threads is racy (it's impossible to check
     // or wait for finalizers on other threads without dead lock).
-    if (!((jl_ptls_t)ptls)->in_finalizer && !((jl_ptls_t)ptls)->finalizers_inhibited && ((jl_ptls_t)ptls)->locks.len == 0) {
+    if (!((jl_ptls_t)ptls)->finalizers_inhibited && ((jl_ptls_t)ptls)->locks.len == 0) {
         jl_task_t *ct = jl_current_task;
         int8_t was_in_finalizer = ((jl_ptls_t)ptls)->in_finalizer;
         ((jl_ptls_t)ptls)->in_finalizer = 1;
         uint64_t save_rngState[4];
         memcpy(&save_rngState[0], &ct->rngState[0], sizeof(save_rngState));
         jl_rng_split(ct->rngState, finalizer_rngState);
+        jl_atomic_store_relaxed(&jl_gc_have_pending_finalizers, 0);
         mmtk_jl_run_finalizers_in_list(false);
         memcpy(&ct->rngState[0], &save_rngState[0], sizeof(save_rngState));
         ((jl_ptls_t)ptls)->in_finalizer = was_in_finalizer;
@@ -713,9 +725,10 @@ JL_DLLEXPORT void scan_julia_obj(void* obj, closure_pointer closure, ProcessEdge
                 obj16_end = obj16_begin + npointers;
                 for (; begin < end; begin += elsize) {
                     for (; obj16_begin < obj16_end; obj16_begin++) {
-                        jl_value_t **slot = &((jl_value_t**)obj)[*obj16_begin];
+                        jl_value_t **slot = &begin[*obj16_begin];
                         process_edge(closure, slot);
                     }
+                    obj16_begin = (uint16_t*)jl_dt_layout_ptrs(layout);
                 }
             } else {
                 assert(0 && "unimplemented");
