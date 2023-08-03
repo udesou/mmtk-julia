@@ -1,3 +1,4 @@
+use crate::RED_ROOT_NODES;
 use crate::edges::JuliaVMEdge;
 use crate::{ROOT_EDGES, ROOT_NODES, SINGLETON, UPCALLS};
 use mmtk::memory_manager;
@@ -46,7 +47,19 @@ impl Scanning<JuliaVM> for VMScanning {
         for obj in roots.drain() {
             roots_to_scan.push(obj);
         }
-        factory.create_process_node_roots_work(roots_to_scan);
+        
+        // node roots: may move beyond the first object (achieved through pinning)
+        factory.create_process_node_roots_work(roots_to_scan, true);
+
+        let mut red_roots: MutexGuard<HashSet<ObjectReference>> = RED_ROOT_NODES.lock().unwrap();
+        let mut red_roots_to_scan = vec![];
+
+        for obj in red_roots.drain() {
+            red_roots_to_scan.push(obj);
+        }
+
+        // red node roots: objects in the transitive closure must not move
+        factory.create_process_node_roots_work(red_roots_to_scan, false);
 
         let roots: Vec<JuliaVMEdge> = ROOT_EDGES
             .lock()
@@ -55,7 +68,11 @@ impl Scanning<JuliaVM> for VMScanning {
             .map(|e| JuliaVMEdge::Simple(mmtk::vm::edge_shape::SimpleEdge::from_address(e)))
             .collect();
         info!("{} thread root edges", roots.len());
-        factory.create_process_edge_roots_work(roots);
+
+        // edge roots should be classified into:
+        // (a) red roots: objects in their transitive closure must not move
+        // (b) black roots: rooted object must not move but objects in the transitive closure may move
+        factory.create_process_edge_roots_work(roots, false);
     }
 
     fn scan_object<EV: EdgeVisitor<JuliaVMEdge>>(

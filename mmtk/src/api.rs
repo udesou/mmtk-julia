@@ -5,6 +5,7 @@ use crate::JuliaVM;
 use crate::Julia_Upcalls;
 use crate::BLOCK_FOR_GC;
 use crate::JULIA_HEADER_SIZE;
+use crate::RED_ROOT_NODES;
 use crate::SINGLETON;
 use crate::UPCALLS;
 use crate::{
@@ -501,6 +502,12 @@ pub extern "C" fn mmtk_add_object_to_mmtk_roots(obj: ObjectReference) {
     ROOT_NODES.lock().unwrap().insert(obj);
 }
 
+#[no_mangle]
+pub extern "C" fn mmtk_add_object_to_mmtk_red_roots(obj: ObjectReference) {
+    // if object is not managed by mmtk it needs to be processed to look for pointers to managed objects (i.e. roots)
+    RED_ROOT_NODES.lock().unwrap().insert(obj);
+}
+
 // Pass this as 'process_edge' so we can reuse scan_julia_task_obj.
 #[no_mangle]
 #[allow(improper_ctypes_definitions)] // closure is a fat pointer, we propelry define its type in C header.
@@ -530,4 +537,28 @@ pub extern "C" fn mmtk_get_obj_size(obj: ObjectReference) -> usize {
         let addr_size = obj.to_raw_address() - 2 * JULIA_HEADER_SIZE;
         addr_size.load::<u64>() as usize
     }
+}
+
+#[cfg(feature = "object_pinning")]
+#[no_mangle]
+pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
+    if !mmtk_object_is_managed_by_mmtk(object.to_raw_address().as_usize()) {
+        return false;
+    }
+    memory_manager::pin_object::<JuliaVM>(object)
+}
+
+#[cfg(feature = "object_pinning")]
+#[no_mangle]
+pub extern "C" fn mmtk_unpin_object(object: ObjectReference) -> bool {
+    if !mmtk_object_is_managed_by_mmtk(object.to_raw_address().as_usize()) {
+        return false;
+    }
+    memory_manager::unpin_object::<JuliaVM>(object)
+}
+
+#[cfg(feature = "object_pinning")]
+#[no_mangle]
+pub extern "C" fn mmtk_is_pinned(object: ObjectReference) -> bool {
+    memory_manager::is_pinned::<JuliaVM>(object)
 }

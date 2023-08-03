@@ -91,6 +91,7 @@ lazy_static! {
     pub static ref STOP_MUTATORS: Arc<(Mutex<usize>, Condvar)> =
         Arc::new((Mutex::new(0), Condvar::new()));
     pub static ref ROOT_NODES: Mutex<HashSet<ObjectReference>> = Mutex::new(HashSet::new());
+    pub static ref RED_ROOT_NODES: Mutex<HashSet<ObjectReference>> = Mutex::new(HashSet::new());
     pub static ref ROOT_EDGES: Mutex<HashSet<Address>> = Mutex::new(HashSet::new());
 
     // We create a boxed mutator with MMTk core, and we mem copy its content to jl_tls_state_t (shallow copy).
@@ -138,6 +139,7 @@ pub struct Julia_Upcalls {
     pub get_marked_finalizers_list: extern "C" fn() -> Address,
     pub arraylist_grow: extern "C" fn(Address, usize),
     pub get_jl_gc_have_pending_finalizers: extern "C" fn() -> *mut i32,
+    pub update_inlined_array: extern "C" fn(to: Address, from: Address),
 }
 
 pub static mut UPCALLS: *const Julia_Upcalls = null_mut();

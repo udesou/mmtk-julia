@@ -31,9 +31,9 @@ lazy_static = "1.1"
 # - change branch
 # - change repo name
 # But other changes including adding/removing whitespaces in commented lines may break the CI
-mmtk = { git = "https://github.com/mmtk/mmtk-core.git", rev = "47ee126f91f25b911498b3d49c35f672f5e935f9" }
+# mmtk = { git = "https://github.com/mmtk/mmtk-core.git", rev = "47ee126f91f25b911498b3d49c35f672f5e935f9" }
 # Uncomment the following to build locally
-# mmtk = { path = "../repos/mmtk-core" }
+mmtk = { path = "../../mmtk-core" }
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_off"] }
 enum-map = ">=2.1"
 atomic = "0.4.6"
@@ -42,14 +42,15 @@ chrono = "*"
 # ykstackmaps = { git = "https://github.com/udesou/ykstackmaps.git", branch = "udesou-master", version = "*" }
 
 [features]
-default = ["mmtk/vm_space", "julia_copy_stack"]
+default = ["mmtk/vm_space", "julia_copy_stack", "object_pinning"]
 
 # Plans
 nogc = []
-immix = ["non_moving_immix"]
+immix = []
 stickyimmix = ["non_moving_immix"]
 marksweep = []
 
 # TODO remove this when we properly support moving
 non_moving_immix = ["mmtk/immix_non_moving", "mmtk/immix_smaller_block"]
 julia_copy_stack = []
+object_pinning = ["mmtk/object_pinning"]

@@ -267,7 +267,7 @@ static void queue_roots(void)
     mmtk_add_object_to_mmtk_roots(jl_emptytuple_type);
     if (cmpswap_names != NULL)
         mmtk_add_object_to_mmtk_roots(cmpswap_names);
-    mmtk_add_object_to_mmtk_roots(jl_global_roots_table);
+    mmtk_add_object_to_mmtk_red_roots(jl_global_roots_table);
 
 }
 
@@ -420,6 +420,11 @@ static void jl_gc_queue_thread_local_mmtk(jl_ptls_t ptls2)
         root_scan_task(ptls2, task);
     }
 
+    // for(int i = 0; i < ptls2->heap.live_tasks.len; i++) {
+    //     // FIXME adding task as root - keeping all live_tasks alive!!!!
+    //     root_scan_task(ptls2, (jl_value_t*)ptls2->heap.live_tasks.items[i]);
+    // }
+
     task = jl_atomic_load_relaxed(&ptls2->current_task);
     if (task != NULL) {
         root_scan_task(ptls2, task);
@@ -509,6 +514,27 @@ JL_DLLEXPORT void scan_julia_exc_obj(void* obj_raw, void* closure, ProcessEdgeFn
     }
 }
 
+// if data is inlined inside the array object --- to->data needs to be updated when copying the array
+void update_inlined_array(void* from, void* to) {
+    jl_value_t* jl_from = (jl_value_t*) from;
+    jl_value_t* jl_to = (jl_value_t*) to;
+
+    uintptr_t tag_to = (uintptr_t)jl_typeof(jl_to);
+    jl_datatype_t *vt = (jl_datatype_t*)tag_to;
+
+    if(vt->name == jl_array_typename) {
+        jl_array_t *a = (jl_array_t*)jl_from;
+        jl_array_t *b = (jl_array_t*)jl_to;
+        if (a->flags.how == 0) {
+            assert(object_is_managed_by_mmtk(a->data));
+            size_t pre_data_bytes = ((size_t)a->data - a->offset*a->elsize) - (size_t)a;
+            if (pre_data_bytes > 0 && pre_data_bytes <= ARRAY_INLINE_NBYTES) {
+                b->data = (void*)((size_t) b + pre_data_bytes);
+            }
+        }
+    }
+}
+
 #define jl_array_data_owner_addr(a) (((jl_value_t**)((char*)a + jl_array_data_owner_offset(jl_array_ndims(a)))))
 
 JL_DLLEXPORT void* get_stackbase(int16_t tid) {
@@ -551,4 +577,5 @@ Julia_Upcalls mmtk_upcalls = (Julia_Upcalls) {
     .get_marked_finalizers_list = get_marked_finalizers_list,
     .arraylist_grow = (void (*)(void*, long unsigned int))arraylist_grow,
     .get_jl_gc_have_pending_finalizers = get_jl_gc_have_pending_finalizers,
+    .update_inlined_array = update_inlined_array,
 };

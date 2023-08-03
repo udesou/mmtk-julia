@@ -31,6 +31,7 @@ extern void mmtk_post_alloc(MMTk_Mutator mutator, void* refer,
     size_t bytes, int allocator);
 
 extern void mmtk_add_object_to_mmtk_roots(void *obj);
+extern void mmtk_add_object_to_mmtk_red_roots(void *obj);
 extern void mmtk_process_root_edges(void* c, void* slot);
 
 extern bool mmtk_is_live_object(void* ref);
@@ -40,6 +41,8 @@ extern void mmtk_modify_check(void* ref);
 extern int mmtk_object_is_managed_by_mmtk(void* addr);
 extern void mmtk_runtime_panic(void);
 extern void mmtk_unreachable(void);
+extern unsigned char mmtk_pin_object(void* obj);
+extern bool mmtk_is_pinned(void* obj);
 
 extern void mmtk_set_vm_space(void* addr, size_t size);
 extern void mmtk_immortal_region_post_alloc(void* addr, size_t size);
@@ -82,6 +85,7 @@ typedef struct {
     void* (* get_marked_finalizers_list)(void);
     void (*arraylist_grow)(void* a, size_t n);
     int* (*get_jl_gc_have_pending_finalizers)(void);
+    void (* update_inlined_array) (void* from, void* to);
 } Julia_Upcalls;
 
 /**
