@@ -127,6 +127,84 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
     close_mutator_iterator(iter);
 }
 
+// number of stacks to always keep available per pool - from gc-stacks.c
+#define MIN_STACK_MAPPINGS_PER_POOL 5
+
+// modified sweep_stack_pools from gc-stacks.c
+void mmtk_sweep_stack_pools(void)
+{
+    // Stack sweeping algorithm:
+    //    // deallocate stacks if we have too many sitting around unused
+    //    for (stk in halfof(free_stacks))
+    //        free_stack(stk, pool_sz);
+    //    // then sweep the task stacks
+    //    for (t in live_tasks)
+    //        if (!gc-marked(t))
+    //            stkbuf = t->stkbuf
+    //            bufsz = t->bufsz
+    //            if (stkbuf)
+    //                push(free_stacks[sz], stkbuf)
+    for (int i = 0; i < jl_n_threads; i++) {
+        jl_ptls_t ptls2 = jl_all_tls_states[i];
+
+        // free half of stacks that remain unused since last sweep
+        for (int p = 0; p < JL_N_STACK_POOLS; p++) {
+            arraylist_t *al = &ptls2->heap.free_stacks[p];
+            size_t n_to_free;
+            if (al->len > MIN_STACK_MAPPINGS_PER_POOL) {
+                n_to_free = al->len / 2;
+                if (n_to_free > (al->len - MIN_STACK_MAPPINGS_PER_POOL))
+                    n_to_free = al->len - MIN_STACK_MAPPINGS_PER_POOL;
+            }
+            else {
+                n_to_free = 0;
+            }
+            for (int n = 0; n < n_to_free; n++) {
+                void *stk = arraylist_pop(al);
+                free_stack(stk, pool_sizes[p]);
+            }
+        }
+
+        arraylist_t *live_tasks = &ptls2->heap.live_tasks;
+        size_t n = 0;
+        size_t ndel = 0;
+        size_t l = live_tasks->len;
+        void **lst = live_tasks->items;
+        if (l == 0)
+            continue;
+        while (1) {
+            jl_task_t *t = (jl_task_t*)lst[n];
+            assert(jl_is_task(t));
+            if (mmtk_is_live_object(t)) {
+                if (t->stkbuf == NULL)
+                    ndel++; // jl_release_task_stack called
+                else
+                    n++;
+            } else {
+                ndel++;
+                void *stkbuf = t->stkbuf;
+                size_t bufsz = t->bufsz;
+                if (stkbuf) {
+                    t->stkbuf = NULL;
+                    _jl_free_stack(ptls2, stkbuf, bufsz);
+                }
+#ifdef _COMPILER_TSAN_ENABLED_
+                if (t->ctx.tsan_state) {
+                    __tsan_destroy_fiber(t->ctx.tsan_state);
+                    t->ctx.tsan_state = NULL;
+                }
+#endif
+            }
+            if (n >= l - ndel)
+                break;
+            void *tmp = lst[n];
+            lst[n] = lst[n + ndel];
+            lst[n + ndel] = tmp;
+        }
+        live_tasks->len -= ndel;
+    }
+}
+
 void mmtk_wait_in_a_safepoint(void) {
     jl_ptls_t ptls = jl_current_task->ptls;
     jl_gc_safepoint_(ptls);
@@ -420,10 +498,11 @@ static void jl_gc_queue_thread_local_mmtk(jl_ptls_t ptls2)
         root_scan_task(ptls2, task);
     }
 
-    // for(int i = 0; i < ptls2->heap.live_tasks.len; i++) {
-    //     // FIXME adding task as root - keeping all live_tasks alive!!!!
-    //     root_scan_task(ptls2, (jl_value_t*)ptls2->heap.live_tasks.items[i]);
-    // }
+    void* c = NULL;
+    for(int i = 0; i < ptls2->heap.live_tasks.len; i++) {
+        // FIXME need to add method to collect dead tasks (and clear their stack!)
+        scan_gcstack((jl_task_t *)ptls2->heap.live_tasks.items[i], c, mmtk_process_root_edges);
+    }
 
     task = jl_atomic_load_relaxed(&ptls2->current_task);
     if (task != NULL) {
@@ -567,6 +646,7 @@ Julia_Upcalls mmtk_upcalls = (Julia_Upcalls) {
     .mmtk_jl_run_finalizers = mmtk_jl_run_finalizers,
     .jl_throw_out_of_memory_error = jl_throw_out_of_memory_error,
     .sweep_malloced_array = mmtk_sweep_malloced_arrays,
+    .sweep_stack_pools = mmtk_sweep_stack_pools,
     .wait_in_a_safepoint = mmtk_wait_in_a_safepoint,
     .exit_from_safepoint = mmtk_exit_from_safepoint,
     .jl_hrtime = jl_hrtime,
