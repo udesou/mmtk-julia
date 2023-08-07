@@ -110,6 +110,8 @@ static void mmtk_sweep_malloced_arrays(void) JL_NOTSAFEPOINT
                 continue;
             }
             if (mmtk_is_live_object(ma->a)) {
+                jl_value_t *maybe_forwarded = (jl_value_t*)mmtk_get_possibly_forwared(ma->a);
+                ma->a = maybe_forwarded;
                 pma = &ma->next;
             }
             else {
@@ -176,6 +178,9 @@ void mmtk_sweep_stack_pools(void)
             jl_task_t *t = (jl_task_t*)lst[n];
             assert(jl_is_task(t));
             if (mmtk_is_live_object(t)) {
+                jl_value_t *maybe_forwarded = (jl_value_t*)mmtk_get_possibly_forwared(t);
+                live_tasks->items[n] = maybe_forwarded;
+                t = maybe_forwarded;
                 if (t->stkbuf == NULL)
                     ndel++; // jl_release_task_stack called
                 else
