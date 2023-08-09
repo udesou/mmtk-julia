@@ -1,5 +1,5 @@
-use crate::RED_ROOT_NODES;
 use crate::edges::JuliaVMEdge;
+use crate::RED_ROOT_NODES;
 use crate::{ROOT_EDGES, ROOT_NODES, SINGLETON, UPCALLS};
 use mmtk::memory_manager;
 use mmtk::scheduler::*;
@@ -47,7 +47,7 @@ impl Scanning<JuliaVM> for VMScanning {
         for obj in roots.drain() {
             roots_to_scan.push(obj);
         }
-        
+
         // node roots: may move beyond the first object (achieved through pinning)
         factory.create_process_node_roots_work(roots_to_scan, true);
 

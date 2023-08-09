@@ -1,16 +1,21 @@
+use crate::api::mmtk_object_is_managed_by_mmtk;
 use crate::edges::JuliaVMEdge;
 use crate::edges::OffsetEdge;
 use crate::julia_types::*;
 use crate::object_model::mmtk_jl_array_ndims;
 use crate::JULIA_BUFF_TAG;
 use crate::UPCALLS;
+use memoffset::offset_of;
 use mmtk::util::Address;
+use mmtk::util::ObjectReference;
 use mmtk::vm::edge_shape::SimpleEdge;
 use mmtk::vm::EdgeVisitor;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 const JL_MAX_TAGS: usize = 64; // from vm/julia/src/jl_exports.h
+const OFFSET_OF_INLINED_SPACE_IN_MODULE: usize =
+    offset_of!(mmtk_jl_module_t, usings) + offset_of!(mmtk_arraylist_t, _space);
 
 extern "C" {
     pub static jl_simplevector_type: *const mmtk_jl_datatype_t;
@@ -97,6 +102,25 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
             // has a pointer to the object that owns the data
             let owner_addr = mmtk_jl_array_data_owner_addr(array);
             process_edge(closure, owner_addr);
+
+            // if the owner is an mmtk object and it moves, a->data (which may be an internal pointer) needs to be updated accordingly
+            if mmtk_object_is_managed_by_mmtk((*array).data as usize)
+                && mmtk_object_is_managed_by_mmtk(
+                    (owner_addr.load::<ObjectReference>())
+                        .to_raw_address()
+                        .as_usize(),
+                )
+            {
+                let owner = owner_addr.load::<ObjectReference>();
+                let offset = (*array).data as usize - owner.to_raw_address().as_usize();
+
+                process_offset_edge(
+                    closure,
+                    Address::from_ptr(::std::ptr::addr_of!((*array).data)),
+                    offset,
+                );
+            }
+
             return;
         }
 
@@ -214,6 +238,17 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
         process_edge(closure, Address::from_ptr(bindings_edge));
 
         let nusings = (*m).usings.len;
+
+        // m.usings.items may be inlined in the module when the array list size <= AL_N_INLINE (cf. arraylist_new)
+        // In that case it may be an mmtk object and not a malloced address.
+        // If it is an mmtk object, (*m).usings.items will then be an internal pointer to the module
+        // which means we will need to trace and update it if the module moves
+        if mmtk_object_is_managed_by_mmtk((*m).usings.items as usize) {
+            let offset = OFFSET_OF_INLINED_SPACE_IN_MODULE;
+            let slot = Address::from_ptr(::std::ptr::addr_of!((*m).usings.items));
+            process_offset_edge(closure, slot, offset);
+        }
+
         if nusings != 0 {
             let mut objary_begin = Address::from_mut_ptr((*m).usings.items);
             let objary_end = objary_begin.shift::<Address>(nusings as isize);

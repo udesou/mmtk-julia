@@ -187,7 +187,7 @@ fn mark_finlist<T: ObjectTracer>(list: &mut ArrayListT, start: usize, tracer: &m
     while i < list.len {
         let cur = list.get(i);
         let cur_i = i;
-        let mut cur_tag : usize = 0;
+        let mut cur_tag: usize = 0;
 
         if cur.is_zero() {
             i += 1;
@@ -209,9 +209,11 @@ fn mark_finlist<T: ObjectTracer>(list: &mut ArrayListT, start: usize, tracer: &m
         }
 
         let traced = tracer.trace_object(new_obj);
-        
+
         // if object has moved, update the list applying the tag
-        list.set(cur_i, unsafe { Address::from_usize(traced.to_raw_address() | cur_tag) });
+        list.set(cur_i, unsafe {
+            Address::from_usize(traced.to_raw_address() | cur_tag)
+        });
 
         i += 1;
     }

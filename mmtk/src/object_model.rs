@@ -71,14 +71,11 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             unimplemented!()
         };
 
-        
-
         let src = Self::ref_to_object_start(from);
         unsafe {
             std::ptr::copy_nonoverlapping::<u8>(src.to_ptr(), dst.to_mut_ptr(), bytes);
         }
         let to_obj = ObjectReference::from_raw_address(dst + header_offset);
-
 
         // use std::fs::OpenOptions;
         // use std::io::Write;
@@ -89,7 +86,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
         //                 .create(true)
         //                 .open("/home/eduardo/mmtk-julia/copied_objs.log")
         //                 .unwrap();
-        
+
         // if let Err(e) = writeln!(file, "Copying object from {} to {}", from, to_obj) {
         //     eprintln!("Couldn't write to file: {}", e);
         // }
@@ -102,7 +99,7 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
             // let vt = mmtk_jl_typeof(from.to_raw_address());
 
             // if (*vt).name == jl_array_typename {
-                ((*UPCALLS).update_inlined_array)(from.to_raw_address(), to_obj.to_raw_address())
+            ((*UPCALLS).update_inlined_array)(from.to_raw_address(), to_obj.to_raw_address())
             // }
         }
 
