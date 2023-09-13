@@ -292,7 +292,9 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
 
         let ta = obj.to_ptr::<mmtk_jl_task_t>();
 
-        mmtk_scan_gcstack(ta, closure);
+        // tpinnig of stack roots happens during root processing
+        // so it's fine to have only one closure here
+        mmtk_scan_gcstack(ta, closure); 
 
         let layout = (*jl_task_type).layout;
         debug_assert!((*layout).fielddesc_type_custom() == 0);
@@ -399,20 +401,33 @@ pub unsafe fn mmtk_scan_gcstack<EV: EdgeVisitor<JuliaVMEdge>>(
         let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
         let mut nroots = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub);
         debug_assert!(nroots.as_usize() as u32 <= UINT32_MAX);
-        let mut nr = nroots >> 2;
+        let mut nr = nroots >> 3;
 
         loop {
             let rts = Address::from_mut_ptr(s).shift::<Address>(2);
             let mut i = 0;
             while i < nr {
-                if (nroots.as_usize() & 1) != 0 {
-                    let slot = read_stack(rts.shift::<Address>(i as isize), offset, lb, ub);
-                    let real_addr = get_stack_addr(slot, offset, lb, ub);
-                    process_edge(closure, real_addr);
+                if (nroots.as_usize() & 4) != 0 {
+                    // root is pinning and not transitively pinning
+                    if (nroots.as_usize() & 1) != 0 {
+                        let slot = read_stack(rts.shift::<Address>(i as isize), offset, lb, ub);
+                        let real_addr = get_stack_addr(slot, offset, lb, ub);
+                        process_edge(closure, real_addr);
+                    } else {
+                        let real_addr =
+                            get_stack_addr(rts.shift::<Address>(i as isize), offset, lb, ub);
+                        process_edge(closure, real_addr);
+                    }
                 } else {
-                    let real_addr =
-                        get_stack_addr(rts.shift::<Address>(i as isize), offset, lb, ub);
-                    process_edge(closure, real_addr);
+                    if (nroots.as_usize() & 1) != 0 {
+                        let slot = read_stack(rts.shift::<Address>(i as isize), offset, lb, ub);
+                        let real_addr = get_stack_addr(slot, offset, lb, ub);
+                        process_edge(closure, real_addr);
+                    } else {
+                        let real_addr =
+                            get_stack_addr(rts.shift::<Address>(i as isize), offset, lb, ub);
+                        process_edge(closure, real_addr);
+                    }
                 }
 
                 i += 1;
@@ -428,7 +443,7 @@ pub unsafe fn mmtk_scan_gcstack<EV: EdgeVisitor<JuliaVMEdge>>(
             let s_nroots_addr = ::std::ptr::addr_of!((*s).nroots);
             let new_nroots = read_stack(Address::from_ptr(s_nroots_addr), offset, lb, ub);
             nroots = new_nroots;
-            nr = nroots >> 2;
+            nr = nroots >> 3;
             continue;
         }
     }
@@ -444,14 +459,14 @@ pub unsafe fn mmtk_scan_gcstack<EV: EdgeVisitor<JuliaVMEdge>>(
 }
 
 #[inline(always)]
-unsafe fn read_stack(addr: Address, offset: isize, lb: u64, ub: u64) -> Address {
+pub unsafe fn read_stack(addr: Address, offset: isize, lb: u64, ub: u64) -> Address {
     let real_addr = get_stack_addr(addr, offset, lb, ub);
 
     real_addr.load::<Address>()
 }
 
 #[inline(always)]
-fn get_stack_addr(addr: Address, offset: isize, lb: u64, ub: u64) -> Address {
+pub fn get_stack_addr(addr: Address, offset: isize, lb: u64, ub: u64) -> Address {
     if addr.as_usize() >= lb as usize && addr.as_usize() < ub as usize {
         return addr + offset;
     } else {
