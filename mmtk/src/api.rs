@@ -1,6 +1,7 @@
 // All functions here are extern function. There is no point for marking them as unsafe.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+use crate::ALLOC_COUNT;
 use crate::JuliaVM;
 use crate::Julia_Upcalls;
 use crate::BLOCK_FOR_GC;
@@ -195,6 +196,8 @@ pub extern "C" fn mmtk_alloc(
         "Alloc size {} is not aligned to min alignment",
         size
     );
+    
+    ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
     memory_manager::alloc::<JuliaVM>(unsafe { &mut *mutator }, size, align, offset, semantics)
 }
 
@@ -205,6 +208,7 @@ pub extern "C" fn mmtk_alloc_large(
     align: usize,
     offset: usize,
 ) -> Address {
+    ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
     memory_manager::alloc::<JuliaVM>(
         unsafe { &mut *mutator },
         size,
@@ -521,10 +525,16 @@ pub extern "C" fn mmtk_get_obj_size(obj: ObjectReference) -> usize {
 #[cfg(feature = "object_pinning")]
 #[no_mangle]
 pub extern "C" fn mmtk_pin_object(object: ObjectReference) -> bool {
+    use crate::PINNED_COUNT;
+
     if !mmtk_object_is_managed_by_mmtk(object.to_raw_address().as_usize()) {
         return false;
     }
-    memory_manager::pin_object::<JuliaVM>(object)
+    if memory_manager::pin_object::<JuliaVM>(object) {
+        PINNED_COUNT.fetch_add(1, Ordering::SeqCst);
+        return true;
+    }
+    return false;   
 }
 
 #[cfg(feature = "object_pinning")]

@@ -1,4 +1,4 @@
-use crate::{JuliaVM, USER_TRIGGERED_GC};
+use crate::{JuliaVM, USER_TRIGGERED_GC, ALLOC_COUNT, PINNED_COUNT};
 use crate::{SINGLETON, UPCALLS};
 use log::{info, trace};
 use mmtk::util::alloc::AllocationError;
@@ -51,6 +51,9 @@ impl Collection<JuliaVM> for VMCollection {
         AtomicBool::store(&BLOCK_FOR_GC, false, Ordering::SeqCst);
         AtomicBool::store(&WORLD_HAS_STOPPED, false, Ordering::SeqCst);
 
+        ALLOC_COUNT.store(0, Ordering::SeqCst);
+        PINNED_COUNT.store(0, Ordering::SeqCst);
+
         let &(_, ref cvar) = &*STW_COND.clone();
         cvar.notify_all();
 
@@ -65,6 +68,8 @@ impl Collection<JuliaVM> for VMCollection {
 
     fn block_for_gc(_tls: VMMutatorThread) {
         info!("Triggered GC!");
+
+        info!("{:?} have been allocated so far, and {:?} have been pinned.", ALLOC_COUNT, PINNED_COUNT);
 
         unsafe { ((*UPCALLS).prepare_to_collect)() };
 

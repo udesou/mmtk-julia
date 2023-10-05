@@ -13,6 +13,7 @@ use mmtk::MMTK;
 use std::collections::HashMap;
 use std::ptr::null_mut;
 use std::sync::atomic::AtomicIsize;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 
@@ -63,6 +64,9 @@ lazy_static! {
         *ret
     };
 }
+
+pub static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static PINNED_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 pub static mut JULIA_HEADER_SIZE: usize = 0;
 pub static mut JULIA_BUFF_TAG: usize = 0;
