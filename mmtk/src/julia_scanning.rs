@@ -336,8 +336,13 @@ pub unsafe fn mmtk_scan_gcstack<EV: EdgeVisitor<JuliaVMEdge>>(
                         get_stack_addr(rts.shift::<Address>(i as isize), offset, lb, ub);
 
                     let slot = read_stack(rts.shift::<Address>(i as isize), offset, lb, ub);
-                    use crate::julia_finalizer::gc_ptr_tag;
                     // handle tagged pointers in finalizer list
+                    use crate::julia_finalizer::gc_ptr_tag;
+                    // malloced pointer tagged in jl_gc_add_quiescent
+                    if slot & 3usize == 3 {
+                        i += 1;
+                        continue;
+                    }
                     if gc_ptr_tag(slot, 1) {
                         i += 1;
                         process_offset_edge(closure, real_addr, 1);
