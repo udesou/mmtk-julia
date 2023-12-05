@@ -46,6 +46,36 @@ impl Collection<JuliaVM> for VMCollection {
     }
 
     fn resume_mutators(_tls: VMWorkerThread) {
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/write-barrier.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("\n\n FINISHED GC \n\n");
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
+        }
+        // {
+        //     use std::fs::OpenOptions;
+        //     use std::io::Write;
+        //     let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .create(true)
+        //         .open("/home/eduardo/mmtk-julia/scanning.log")
+        //         .unwrap();
+
+        //     if let Err(e) = writeln!(file, "\n\n FINISHED GC \n\n") {
+        //         eprintln!("Couldn't write to file: {}", e);
+        //     }
+        // }
         // Get the end time of the GC
         let end = unsafe { ((*UPCALLS).jl_hrtime)() };
         trace!("gc_end = {}", end);

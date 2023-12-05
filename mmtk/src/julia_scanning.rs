@@ -51,6 +51,23 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
         if PRINT_OBJ_TYPE {
             println!("scan_julia_obj {}: simple vector\n", obj);
         }
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("Scanning object {} of type simple vector", obj);
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
+        }
+
         let length = mmtk_jl_svec_len(obj);
         let mut objary_begin = mmtk_jl_svec_data(obj);
         let objary_end = objary_begin.shift::<Address>(length as isize);
@@ -62,6 +79,22 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
     } else if (*vt).name == jl_array_typename {
         if PRINT_OBJ_TYPE {
             println!("scan_julia_obj {}: array\n", obj);
+        }
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("Scanning object {} of type array", obj);
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
         }
 
         let array = obj.to_ptr::<mmtk_jl_array_t>();
@@ -156,6 +189,23 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
             println!("scan_julia_obj {}: module\n", obj);
         }
 
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("Scanning object {} of type module", obj);
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
+        }
+
         let m = obj.to_ptr::<mmtk_jl_module_t>();
         let bsize = (*m).bindings.size;
         let mut begin =
@@ -212,6 +262,23 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
             println!("scan_julia_obj {}: task\n", obj);
         }
 
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("Scanning object {} of type task", obj);
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
+        }
+
         let ta = obj.to_ptr::<mmtk_jl_task_t>();
 
         mmtk_scan_gcstack(ta, closure);
@@ -237,6 +304,23 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
     } else {
         if PRINT_OBJ_TYPE {
             println!("scan_julia_obj {}: datatype\n", obj);
+        }
+
+        {
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(file,
+            // println!("Scanning object {} of type vt = {:?} ", obj, vt);
+            //      {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
         }
 
         if vt == jl_weakref_type {
@@ -403,11 +487,39 @@ use mmtk::vm::edge_shape::Edge;
 #[inline(always)]
 pub fn process_edge<EV: EdgeVisitor<JuliaVMEdge>>(closure: &mut EV, slot: Address) {
     let simple_edge = SimpleEdge::from_address(slot);
+    let obj_to_scan = simple_edge.load();
+    {
+        if !obj_to_scan.is_null() {
+            let obj_usize = obj_to_scan.to_raw_address().as_usize();
+            // use std::fs::OpenOptions;
+            // use std::io::Write;
+            // let mut file = OpenOptions::new()
+            //     .write(true)
+            //     .append(true)
+            //     .create(true)
+            //     .open("/home/eduardo/mmtk-julia/scanning.log")
+            //     .unwrap();
+
+            // if let Err(e) = writeln!(
+            if false {
+                println!(
+                    "\tslot {:?} contains object {:?} ",
+                    simple_edge,
+                    obj_usize
+                );
+            }
+            
+            // ) {
+            //     eprintln!("Couldn't write to file: {}", e);
+            // }
+        }
+    }
+
     debug_assert!(
-        simple_edge.load().is_null()
-            || mmtk::memory_manager::is_mapped_address(simple_edge.load().to_raw_address()),
+        obj_to_scan.is_null()
+            || mmtk::memory_manager::is_mapped_address(obj_to_scan.to_raw_address()),
         "Object {:?} in slot {:?} is not mapped address",
-        simple_edge.load(),
+        obj_to_scan,
         simple_edge
     );
     closure.visit_edge(JuliaVMEdge::Simple(simple_edge));
