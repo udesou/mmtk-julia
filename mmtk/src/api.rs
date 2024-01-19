@@ -257,6 +257,11 @@ pub extern "C" fn mmtk_total_bytes() -> usize {
 }
 
 #[no_mangle]
+pub extern "C" fn mmtk_live_bytes_in_last_gc() -> usize {
+    memory_manager::live_bytes_in_last_gc(&SINGLETON)
+}
+
+#[no_mangle]
 pub extern "C" fn mmtk_is_live_object(object: ObjectReference) -> bool {
     object.is_live()
 }

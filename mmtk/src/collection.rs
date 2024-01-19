@@ -53,14 +53,12 @@ impl Collection<JuliaVM> for VMCollection {
         unsafe {
             ((*UPCALLS).update_gc_stats)(
                 gc_time,
-                crate::api::mmtk_used_bytes(),
+                crate::api::mmtk_live_bytes_in_last_gc(),
                 is_current_gc_nursery(),
             )
         }
 
         AtomicBool::store(&BLOCK_FOR_GC, false, Ordering::SeqCst);
-        AtomicBool::store(&WORLD_HAS_STOPPED, false, Ordering::SeqCst);
-
         let &(_, ref cvar) = &*STW_COND.clone();
         cvar.notify_all();
 
@@ -152,4 +150,6 @@ pub extern "C" fn mmtk_block_thread_for_gc(gc_n_threads: u16) {
     while AtomicBool::load(&BLOCK_FOR_GC, Ordering::SeqCst) {
         count = cvar.wait(count).unwrap();
     }
+
+    AtomicBool::store(&WORLD_HAS_STOPPED, false, Ordering::SeqCst);
 }

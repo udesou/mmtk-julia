@@ -1,11 +1,11 @@
-use crate::api::{mmtk_get_obj_size, mmtk_object_is_managed_by_mmtk};
+use crate::api::mmtk_object_is_managed_by_mmtk;
 use crate::julia_scanning::{
     jl_array_typename, jl_method_type, jl_module_type, jl_simplevector_type, jl_string_type,
     jl_task_type, jl_uniontype_type, mmtk_jl_array_len, mmtk_jl_array_ndimwords, mmtk_jl_tparam0,
     mmtk_jl_typeof,
 };
 use crate::julia_types::*;
-use crate::{JuliaVM, JULIA_BUFF_TAG, JULIA_HEADER_SIZE};
+use crate::{JuliaVM, JULIA_BUFF_TAG, JULIA_HEADER_SIZE, UPCALLS};
 use mmtk::util::copy::*;
 use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::ObjectModel;
@@ -55,9 +55,14 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 
     fn get_current_size(object: ObjectReference) -> usize {
-        // not being called by objects in LOS
-        debug_assert!(!is_object_in_los(&object));
-        unsafe { get_so_object_size(object) }
+        let size = if is_object_in_los(&object) {
+            unsafe { ((*UPCALLS).get_lo_size)(object) }
+        } else {
+            unsafe { get_so_object_size(object) }
+        };
+
+        // println!("object = {}, size = {}", object, size);
+        size
     }
 
     fn get_size_when_copied(_object: ObjectReference) -> usize {
@@ -118,6 +123,13 @@ pub fn is_object_in_los(object: &ObjectReference) -> bool {
         && (*object).to_raw_address().as_usize() < 0x800_0000_0000
 }
 
+#[inline(always)]
+pub fn is_object_in_immortal(object: &ObjectReference) -> bool {
+    // FIXME: get the range from MMTk. Or at least assert at boot time to make sure those constants are correct.
+    (*object).to_raw_address().as_usize() >= 0x400_0000_0000
+        && (*object).to_raw_address().as_usize() < 0x600_0000_0000
+}
+
 const JL_GC_SIZECLASSES: [::std::os::raw::c_int; 49] = [
     8,
     // 16 pools at 8-byte spacing
@@ -160,7 +172,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
     let obj_type = mmtk_jl_typeof(obj_address);
 
     if obj_type as usize == JULIA_BUFF_TAG {
-        mmtk_get_obj_size(object)
+        if is_object_in_immortal(&object) {
+            return 0; // FIXME: return the size of immortal buffer objects
+        }
+        unsafe { ((*UPCALLS).get_lo_size)(object) }
     } else if (*obj_type).name == jl_array_typename {
         let a = obj_address.to_ptr::<mmtk_jl_array_t>();
         let osize = match (*a).flags.how_custom() {
@@ -181,17 +196,17 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
                         dtsz = pre_data_bytes;
                         dtsz += mmtk_jl_array_nbytes(a);
                     }
+
                     if dtsz + JULIA_HEADER_SIZE > 2032 {
                         // if it's too large to be inlined (a->data and a are disjoint objects)
                         dtsz = std::mem::size_of::<mmtk_jl_array_t>()
                             + a_ndims_words * std::mem::size_of::<usize>();
                     }
                 }
-                debug_assert!(
-                    dtsz + JULIA_HEADER_SIZE <= 2032,
-                    "size {} greater than minimum!",
-                    dtsz + JULIA_HEADER_SIZE
-                );
+
+                if dtsz + JULIA_HEADER_SIZE > 2032 {
+                    return dtsz + JULIA_HEADER_SIZE;
+                }
 
                 let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
                 JL_GC_SIZECLASSES[pool_id]
@@ -201,11 +216,9 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
                 let dtsz = std::mem::size_of::<mmtk_jl_array_t>()
                     + a_ndims_words * std::mem::size_of::<usize>();
 
-                debug_assert!(
-                    dtsz + JULIA_HEADER_SIZE <= 2032,
-                    "size {} greater than minimum!",
-                    dtsz + JULIA_HEADER_SIZE
-                );
+                if dtsz + JULIA_HEADER_SIZE > 2032 {
+                    return dtsz + JULIA_HEADER_SIZE;
+                }
 
                 let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
                 JL_GC_SIZECLASSES[pool_id]
@@ -215,11 +228,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
                 let dtsz = std::mem::size_of::<mmtk_jl_array_t>()
                     + a_ndims_words * std::mem::size_of::<usize>()
                     + std::mem::size_of::<Address>();
-                debug_assert!(
-                    dtsz + JULIA_HEADER_SIZE <= 2032,
-                    "size {} greater than minimum!",
-                    dtsz + JULIA_HEADER_SIZE
-                );
+
+                if dtsz + JULIA_HEADER_SIZE > 2032 {
+                    return dtsz + JULIA_HEADER_SIZE;
+                }
 
                 let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
                 JL_GC_SIZECLASSES[pool_id]
@@ -232,11 +244,9 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
         let length = (*obj_address.to_ptr::<mmtk_jl_svec_t>()).length as usize;
         let dtsz = length * std::mem::size_of::<Address>() + std::mem::size_of::<mmtk_jl_svec_t>();
 
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let sz = dtsz + JULIA_HEADER_SIZE;
 
@@ -246,11 +256,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
         osize as usize
     } else if obj_type == jl_module_type {
         let dtsz = std::mem::size_of::<mmtk_jl_module_t>();
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
         let osize = JL_GC_SIZECLASSES[pool_id];
@@ -258,11 +267,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
         osize as usize
     } else if obj_type == jl_task_type {
         let dtsz = std::mem::size_of::<mmtk_jl_task_t>();
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
         let osize = JL_GC_SIZECLASSES[pool_id];
@@ -272,11 +280,9 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
         let length = object.to_raw_address().load::<usize>();
         let dtsz = length + std::mem::size_of::<usize>() + 1;
 
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let pool_id = mmtk_jl_gc_szclass_align8(dtsz + JULIA_HEADER_SIZE);
         let osize = JL_GC_SIZECLASSES[pool_id];
@@ -284,11 +290,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
         osize as usize
     } else if obj_type == jl_method_type {
         let dtsz = std::mem::size_of::<mmtk_jl_method_t>();
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
         let osize = JL_GC_SIZECLASSES[pool_id];
@@ -297,11 +302,10 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
     } else {
         let layout = (*obj_type).layout;
         let dtsz = (*layout).size as usize;
-        debug_assert!(
-            dtsz + JULIA_HEADER_SIZE <= 2032,
-            "size {} greater than minimum!",
-            dtsz + JULIA_HEADER_SIZE
-        );
+
+        if dtsz + JULIA_HEADER_SIZE > 2032 {
+            return dtsz + JULIA_HEADER_SIZE;
+        }
 
         let pool_id = mmtk_jl_gc_szclass(dtsz + JULIA_HEADER_SIZE);
         let osize = JL_GC_SIZECLASSES[pool_id];
@@ -313,13 +317,8 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
 #[inline(always)]
 pub unsafe fn get_object_start_ref(object: ObjectReference) -> Address {
     let obj_address = object.to_raw_address();
-    let obj_type = mmtk_jl_typeof(obj_address);
 
-    if obj_type as usize == JULIA_BUFF_TAG {
-        obj_address - 2 * JULIA_HEADER_SIZE
-    } else {
-        obj_address - JULIA_HEADER_SIZE
-    }
+    obj_address - JULIA_HEADER_SIZE
 }
 
 #[inline(always)]

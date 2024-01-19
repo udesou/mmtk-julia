@@ -54,24 +54,48 @@ JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_default(jl_ptls_t ptls, int pool_offse
     jl_gc_safepoint_(ptls);
 
     jl_value_t *v;
-    if ((uintptr_t)ty != jl_buff_tag) {
-        // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
-        jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *)mmtk_immix_alloc_fast(&ptls->mmtk_mutator, osize, 16, sizeof(jl_taggedvalue_t));
-        v = jl_valueof(v_tagged);
-        mmtk_immix_post_alloc_fast(&ptls->mmtk_mutator, v, osize);
-    } else {
-        // allocating an extra word to store the size of buffer objects
-        jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *)mmtk_immix_alloc_fast(&ptls->mmtk_mutator, osize + sizeof(jl_taggedvalue_t), 16, 0);
-        jl_value_t* v_tagged_aligned = ((jl_value_t*)((char*)(v_tagged) + sizeof(jl_taggedvalue_t)));
-        v = jl_valueof(v_tagged_aligned);
-        mmtk_store_obj_size_c(v, osize + sizeof(jl_taggedvalue_t));
-        mmtk_immix_post_alloc_fast(&ptls->mmtk_mutator, v, osize + sizeof(jl_taggedvalue_t));
-    }
+
+    // v needs to be 16 byte aligned, therefore v_tagged needs to be offset accordingly to consider the size of header
+    jl_taggedvalue_t *v_tagged = (jl_taggedvalue_t *)mmtk_immix_alloc_fast(&ptls->mmtk_mutator, osize, 16, sizeof(jl_taggedvalue_t));
+    v = jl_valueof(v_tagged);
+    mmtk_immix_post_alloc_fast(&ptls->mmtk_mutator, v, osize);
     
     ptls->gc_num.allocd += osize;
     ptls->gc_num.poolalloc++;
 
     return v;
+}
+
+JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_buf(jl_ptls_t ptls, size_t sz)
+{
+    // safepoint
+    jl_gc_safepoint_(ptls);
+
+    size_t offs = offsetof(bigval_t, header);
+    assert(sz >= sizeof(jl_taggedvalue_t) && "sz must include tag");
+    static_assert(offsetof(bigval_t, header) >= sizeof(void*), "Empty bigval header?");
+    static_assert(sizeof(bigval_t) % JL_HEAP_ALIGNMENT == 0, "");
+    size_t allocsz = LLT_ALIGN(sz + offs, JL_CACHE_BYTE_ALIGNMENT);
+    if (allocsz < sz) { // overflow in adding offs, size was "negative"
+        assert(0 && "Error when allocating big object");
+        jl_throw(jl_memory_exception);
+    }
+
+    bigval_t *v = (bigval_t*)mmtk_immix_alloc_fast(&ptls->mmtk_mutator, allocsz, JL_CACHE_BYTE_ALIGNMENT, 0);
+
+    if (v == NULL) {
+        assert(0 && "Allocation failed");
+        jl_throw(jl_memory_exception);
+    }
+    v->sz = allocsz;
+
+    ptls->gc_num.allocd += allocsz;
+    ptls->gc_num.bigalloc++;
+
+    jl_value_t *result = jl_valueof(&v->header);
+    mmtk_post_alloc(&ptls->mmtk_mutator, result, allocsz, 0);
+
+    return result;
 }
 
 JL_DLLEXPORT jl_value_t *jl_mmtk_gc_alloc_big(jl_ptls_t ptls, size_t sz)
@@ -454,6 +478,15 @@ bool check_is_collection_disabled(void) {
 }
 
 
+size_t get_lo_size(void* obj_raw) 
+{
+    jl_value_t* obj = (jl_value_t*) obj_raw;
+    jl_taggedvalue_t *v = jl_astaggedvalue(obj);
+    // bigval_header: but we cannot access the function here. So use container_of instead.
+    bigval_t* hdr = container_of(v, bigval_t, header);
+    return hdr->sz;
+}
+
 #define assert_size(ty_a, ty_b) \
     if(sizeof(ty_a) != sizeof(ty_b)) {\
         printf("%s size = %ld, %s size = %ld. Need to update our type definition.\n", #ty_a, sizeof(ty_a), #ty_b, sizeof(ty_b));\
@@ -538,6 +571,7 @@ Julia_Upcalls mmtk_upcalls = (Julia_Upcalls) {
     .sweep_weak_refs = sweep_weak_refs,
     .wait_in_a_safepoint = mmtk_wait_in_a_safepoint,
     .exit_from_safepoint = mmtk_exit_from_safepoint,
+    .get_lo_size = get_lo_size,
     .mmtk_jl_hrtime = mmtk_jl_hrtime,
     .update_gc_stats = update_gc_stats,
     .get_abi_structs_checksum_c = get_abi_structs_checksum_c,

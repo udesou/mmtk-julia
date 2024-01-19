@@ -43,7 +43,7 @@ thread-id = "*"
 # ykstackmaps = { git = "https://github.com/udesou/ykstackmaps.git", branch = "udesou-master", version = "*" }
 
 [features]
-default = ["mmtk/vm_space", "julia_copy_stack"]
+default = ["mmtk/vm_space", "julia_copy_stack", "count_live_bytes_in_gc"]
 
 # Plans
 nogc = []
@@ -54,3 +54,4 @@ marksweep = []
 # TODO remove this when we properly support moving
 non_moving_immix = ["mmtk/immix_non_moving", "mmtk/immix_smaller_block"]
 julia_copy_stack = []
+count_live_bytes_in_gc = ["mmtk/count_live_bytes_in_gc"]
