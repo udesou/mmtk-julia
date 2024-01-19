@@ -55,6 +55,9 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 
     fn get_current_size(object: ObjectReference) -> usize {
+        if is_object_in_vm_space(&object) {
+            return 0; // boot image object shouldn't count
+        }
         let size = if is_object_in_los(&object) {
             unsafe { ((*UPCALLS).get_lo_size)(object) }
         } else {
@@ -130,6 +133,12 @@ pub fn is_object_in_immortal(object: &ObjectReference) -> bool {
         && (*object).to_raw_address().as_usize() < 0x600_0000_0000
 }
 
+#[inline(always)]
+pub fn is_object_in_vm_space(object: &ObjectReference) -> bool {
+    // FIXME: get the range from MMTk. Or at least assert at boot time to make sure those constants are correct.
+    (*object).to_raw_address().as_usize() >= 0x7000_0000_0000
+}
+
 const JL_GC_SIZECLASSES: [::std::os::raw::c_int; 49] = [
     8,
     // 16 pools at 8-byte spacing
@@ -172,7 +181,7 @@ pub unsafe fn get_so_object_size(object: ObjectReference) -> usize {
     let obj_type = mmtk_jl_typeof(obj_address);
 
     if obj_type as usize == JULIA_BUFF_TAG {
-        if is_object_in_immortal(&object) {
+        if is_object_in_immortal(&object) || is_object_in_vm_space(&object) {
             return 0; // FIXME: return the size of immortal buffer objects
         }
         unsafe { ((*UPCALLS).get_lo_size)(object) }
