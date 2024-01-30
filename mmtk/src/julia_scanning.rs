@@ -52,7 +52,7 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
             obj.as_usize() - std::mem::size_of::<crate::julia_scanning::mmtk_jl_taggedvalue_t>();
         let t_header = Address::from_usize(as_tagged_value).load::<Address>();
         let tag = t_header.as_usize() & 3;
-        if tag == 2 {
+        if tag == 1 {
             // buf is binding
             let b = obj.to_ptr::<mmtk_jl_binding_t>();
             let value = ::std::ptr::addr_of!((*b).value);
