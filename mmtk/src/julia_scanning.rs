@@ -1,14 +1,21 @@
+use crate::api::mmtk_is_pinned;
+use crate::api::mmtk_object_is_managed_by_mmtk;
 use crate::edges::JuliaVMEdge;
 use crate::edges::OffsetEdge;
 use crate::julia_types::*;
 use crate::object_model::mmtk_jl_array_ndims;
+use crate::JuliaVM;
 use crate::JULIA_BUFF_TAG;
 use crate::UPCALLS;
+use memoffset::offset_of;
 use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::edge_shape::SimpleEdge;
 use mmtk::vm::EdgeVisitor;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+
+const OFFSET_OF_INLINED_SPACE_IN_MODULE: usize =
+    offset_of!(mmtk_jl_module_t, usings) + offset_of!(mmtk_arraylist_t, _space);
 
 extern "C" {
     pub static jl_simplevector_type: *const mmtk_jl_datatype_t;
@@ -43,7 +50,33 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
     // get Julia object type
     let vt = mmtk_jl_typeof(obj);
 
-    if vt == jl_symbol_type || vt as usize == JULIA_BUFF_TAG {
+    // We don't scan buffers, as they will be scanned as a part of its parent object.
+    // But when a jl_binding_t buffer is inserted into remset, they have be to scanned.
+    // The gc bits (tag), which is set in the write barrier, tells us if the buffer is in the remset.
+    if vt as usize == JULIA_BUFF_TAG {
+        let as_tagged_value =
+            obj.as_usize() - std::mem::size_of::<crate::julia_scanning::mmtk_jl_taggedvalue_t>();
+        let t_header = Address::from_usize(as_tagged_value).load::<Address>();
+        let tag = t_header.as_usize() & 3;
+        if tag == 2 {
+            // buf is binding
+            let b = obj.to_ptr::<mmtk_jl_binding_t>();
+            let value = ::std::ptr::addr_of!((*b).value);
+            let globalref = ::std::ptr::addr_of!((*b).globalref);
+            let ty = ::std::ptr::addr_of!((*b).ty);
+
+            process_edge(closure, Address::from_usize(value as usize));
+            process_edge(closure, Address::from_usize(globalref as usize));
+            process_edge(closure, Address::from_usize(ty as usize));
+            // clearing tag bits
+            Address::from_usize(as_tagged_value).store::<usize>(t_header.as_usize() & !3);
+            return;
+        } else {
+            return; // do not scan buffers
+        }
+    }
+
+    if vt == jl_symbol_type {
         return;
     }
 
@@ -68,7 +101,13 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
         let array = obj.to_ptr::<mmtk_jl_array_t>();
         let flags = (*array).flags;
 
-        if flags.how_custom() == 1 {
+        if flags.how_custom() == 0 {
+            // data is inlined, or a foreign pointer we don't manage
+            // if data is inlined (i.e. it is an internal pointer) and the array moves,
+            // a->data is currently updated when copying the array since there may be other hidden
+            // fields before the inlined data affecting the offset in which a->data points to
+            // see jl_array_t in julia.h
+        } else if flags.how_custom() == 1 {
             // julia-allocated buffer that needs to be marked
             let offset = (*array).offset as usize * (*array).elsize as usize;
             let data_addr = ::std::ptr::addr_of!((*array).data);
@@ -79,6 +118,19 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
         } else if flags.how_custom() == 3 {
             // has a pointer to the object that owns the data
             let owner_addr = mmtk_jl_array_data_owner_addr(array);
+
+            // to avoid having to update a->data, which requires introspecting the owner object
+            // we simply expect that both owner and buffers are pinned when in a moving GC
+            #[cfg(not(feature = "non_moving"))]
+            debug_assert!(
+                (mmtk_object_is_managed_by_mmtk(owner_addr.load())
+                    && mmtk_is_pinned(owner_addr.load())
+                    || !(mmtk_object_is_managed_by_mmtk(owner_addr.load()))),
+                "Owner ({:?}) may move (is_pinned = {}), a->data may become outdated!",
+                owner_addr.load::<ObjectReference>(),
+                mmtk_is_pinned(owner_addr.load())
+            );
+
             process_edge(closure, owner_addr);
             return;
         }
@@ -194,6 +246,16 @@ pub unsafe fn scan_julia_object<EV: EdgeVisitor<JuliaVMEdge>>(obj: Address, clos
             println!(" - scan parent: {:?}\n", parent_edge);
         }
         process_edge(closure, Address::from_ptr(parent_edge));
+
+        // m.usings.items may be inlined in the module when the array list size <= AL_N_INLINE (cf. arraylist_new)
+        // In that case it may be an mmtk object and not a malloced address.
+        // If it is an mmtk object, (*m).usings.items will then be an internal pointer to the module
+        // which means we will need to trace and update it if the module moves
+        if mmtk_object_is_managed_by_mmtk((*m).usings.items as usize) {
+            let offset = OFFSET_OF_INLINED_SPACE_IN_MODULE;
+            let slot = Address::from_ptr(::std::ptr::addr_of!((*m).usings.items));
+            process_offset_edge(closure, slot, offset);
+        }
 
         let nusings = (*m).usings.len;
         if nusings != 0 {
@@ -406,11 +468,21 @@ pub fn process_edge<EV: EdgeVisitor<JuliaVMEdge>>(closure: &mut EV, slot: Addres
     let simple_edge = SimpleEdge::from_address(slot);
     debug_assert!(
         simple_edge.load().is_null()
-            || mmtk::memory_manager::is_mapped_address(simple_edge.load().to_raw_address()),
+            || mmtk::memory_manager::is_in_mmtk_spaces::<JuliaVM>(simple_edge.load()),
         "Object {:?} in slot {:?} is not mapped address",
         simple_edge.load(),
         simple_edge
     );
+
+    // captures wrong edges before creating the work
+    debug_assert!(
+        simple_edge.load().to_raw_address().as_usize() % 16 == 0
+            || simple_edge.load().to_raw_address().as_usize() % 8 == 0,
+        "Object {:?} in slot {:?} is not aligned to 8 or 16",
+        simple_edge.load(),
+        simple_edge
+    );
+
     closure.visit_edge(JuliaVMEdge::Simple(simple_edge));
 }
 
@@ -460,7 +532,7 @@ pub fn process_offset_edge<EV: EdgeVisitor<JuliaVMEdge>>(
     let offset_edge = OffsetEdge::new_with_offset(slot, offset);
     debug_assert!(
         offset_edge.load().is_null()
-            || mmtk::memory_manager::is_mapped_address(offset_edge.load().to_raw_address()),
+            || mmtk::memory_manager::is_in_mmtk_spaces::<JuliaVM>(offset_edge.load()),
         "Object {:?} in slot {:?} is not mapped address",
         offset_edge.load(),
         offset_edge
