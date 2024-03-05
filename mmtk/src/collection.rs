@@ -1,3 +1,4 @@
+// use crate::api::mmtk_immixspace_fragmentation_rate;
 use crate::JuliaVM;
 use crate::{SINGLETON, UPCALLS};
 use log::{info, trace};
@@ -70,6 +71,13 @@ impl Collection<JuliaVM> for VMCollection {
             crate::api::mmtk_used_bytes(),
             crate::api::mmtk_total_bytes()
         );
+
+        // #[cfg(feature = "print_fragmentation_stats")]
+        // println!(
+        //     "{} Fragmentation rate for immixspace (live_bytes / used_pages_as_bytes) = {}%",
+        //     chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"),
+        //     mmtk_immixspace_fragmentation_rate()
+        // );
 
         trace!("Resuming mutators.");
     }

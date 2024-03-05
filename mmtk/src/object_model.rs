@@ -118,9 +118,11 @@ impl ObjectModel<JuliaVM> for VMObjectModel {
     }
 
     fn get_current_size(object: ObjectReference) -> usize {
-        // not being called by objects in LOS
-        debug_assert!(!is_object_in_los(&object));
-        unsafe { get_so_object_size(object) }
+        if is_object_in_los(&object) {
+            unsafe { ((*UPCALLS).get_lo_size)(object) }
+        } else {
+            unsafe { get_so_object_size(object) }
+        }
     }
 
     fn get_size_when_copied(_object: ObjectReference) -> usize {

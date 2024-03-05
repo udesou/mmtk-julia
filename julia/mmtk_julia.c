@@ -294,6 +294,15 @@ static void add_node_to_tpinned_roots_buffer(RootsWorkClosure* closure, RootsWor
     }
 }
 
+size_t get_lo_size(void* obj_raw) 
+{
+    jl_value_t* obj = (jl_value_t*) obj_raw;
+    jl_taggedvalue_t *v = jl_astaggedvalue(obj);
+    // bigval_header: but we cannot access the function here. So use container_of instead.
+    bigval_t* hdr = container_of(v, bigval_t, header);
+    return hdr->sz;
+}
+
 void scan_vm_specific_roots(RootsWorkClosure* closure)
 {
     // Create a new buf
@@ -584,6 +593,7 @@ uint64_t mmtk_jl_hrtime(void) JL_NOTSAFEPOINT
 Julia_Upcalls mmtk_upcalls = (Julia_Upcalls) {
     .scan_julia_exc_obj = scan_julia_exc_obj,
     .get_stackbase = get_stackbase,
+    .get_lo_size = get_lo_size,
     // .run_finalizer_function = run_finalizer_function,
     .mmtk_jl_run_finalizers = mmtk_jl_run_finalizers,
     .mmtk_jl_throw_out_of_memory_error = mmtk_jl_throw_out_of_memory_error,

@@ -540,3 +540,9 @@ pub extern "C" fn mmtk_unpin_object(_object: ObjectReference) -> bool {
 pub extern "C" fn mmtk_is_pinned(_object: ObjectReference) -> bool {
     false
 }
+
+// #[cfg(feature = "print_fragmentation_stats")]
+// #[no_mangle]
+// pub extern "C" fn mmtk_immixspace_fragmentation_rate() -> f64 {
+//     memory_manager::fragmentation_rate_in_immixspace::<JuliaVM>(&SINGLETON)
+// }

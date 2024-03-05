@@ -6,6 +6,7 @@ extern crate lazy_static;
 
 use mmtk::util::opaque_pointer::*;
 use mmtk::util::Address;
+use mmtk::util::ObjectReference;
 use mmtk::vm::VMBinding;
 use mmtk::MMTKBuilder;
 use mmtk::MMTK;
@@ -93,6 +94,7 @@ pub struct Julia_Upcalls {
     pub scan_julia_exc_obj:
         extern "C" fn(obj: Address, closure: Address, process_edge: ProcessEdgeFn),
     pub get_stackbase: extern "C" fn(tid: u16) -> usize,
+    pub get_lo_size: extern "C" fn(object: ObjectReference) -> usize,
     pub mmtk_jl_run_finalizers: extern "C" fn(tls: OpaquePointer),
     pub jl_throw_out_of_memory_error: extern "C" fn(),
     pub mmtk_sweep_malloced_array: extern "C" fn(),
