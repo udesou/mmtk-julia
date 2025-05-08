@@ -57,3 +57,6 @@ non_moving = ["mmtk/immix_non_moving", "mmtk/immix_smaller_block"]
 
 # This feature enables stress copying for Immix for debug use.
 immix_stress_copying = ["mmtk/immix_stress_copying"]
+
+# Use this feature to print fragmentation/pinning stats
+dump_memory_stats = ["mmtk/dump_memory_stats"]
