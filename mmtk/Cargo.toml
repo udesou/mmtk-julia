@@ -36,6 +36,7 @@ atomic = "0.4.6"
 chrono = "*"
 thread-id = "*"
 memoffset = "*"
+json = "0.12.4"
 
 # ykstackmaps = { git = "https://github.com/udesou/ykstackmaps.git", branch = "udesou-master", version = "*" }
 
@@ -65,3 +66,4 @@ immix_max_moving = ["mmtk/immix_stress_defrag", "mmtk/immix_defrag_every_block"]
 dump_memory_stats = ["mmtk/dump_memory_stats"]
 
 address_based_hashing = []
+heap_dump = []
