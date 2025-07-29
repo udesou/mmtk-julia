@@ -117,7 +117,7 @@ pub extern "C" fn mmtk_gc_init(
             &SINGLETON,
             AllocationSemantics::Default,
         );
-        assert_eq!(default_allocator, AllocatorSelector::Immix(0));
+        assert!(default_allocator == AllocatorSelector::Immix(0) || default_allocator == AllocatorSelector::BumpPointer(0));
         let immortal_allocator = memory_manager::get_allocator_mapping::<JuliaVM>(
             &SINGLETON,
             AllocationSemantics::Immortal,
