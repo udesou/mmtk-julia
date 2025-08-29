@@ -23,9 +23,7 @@ declare -a max_moving_tests_to_skip=(
     "cmdlineargs"
     "Downloads"
     "read"
-    "threads"
     "LibCURL"
-    "rounding"
     "loading"
     "misc"
 )
@@ -63,18 +61,24 @@ if [[ $CHOOSE_TESTS_JL_CONTENT =~ $REGEX_PATTERN ]]; then
                 continue
             fi
 
-            # OOM since 27 April 2025 db75908f97355337efbb7fe046cef0707449ac78
             if [[ $test =~ "rounding" ]]; then
-                echo "-> rounding tests keep OOM -- will investigate this separately"
+                # Run rounding test with single thread and Julia's 
+                # heap resizing (it OOMs with a fixed heap)
+                echo "-> Run"
+                ci_run_jl_test $test 1 $moving_feature
                 continue
             fi
+
             if [[ $test =~ "ranges" ]]; then
-                echo "-> ranges tests keep OOM -- will investigate this separately"
+                # Run ranges test with single thread and Julia's 
+                # heap resizing (it OOMs with a fixed heap)
+                echo "-> Run"
+                ci_run_jl_test $test 1 $moving_feature
                 continue
             fi
 
             echo "-> Run"
-            ci_run_jl_test $test 1 $moving_feature
+            ci_run_jl_test $test 2 $moving_feature
         fi
     done
 else
