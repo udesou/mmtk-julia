@@ -103,8 +103,8 @@ impl Scanning<JuliaVM> for VMScanning {
             if !task.is_null() {
                 // captures wrong root nodes before creating the work
                 debug_assert!(
-                    Address::from_ptr(task).as_usize() % 16 == 0
-                        || Address::from_ptr(task).as_usize() % 8 == 0,
+                    Address::from_ptr(task).is_aligned_to(16)
+                        || Address::from_ptr(task).is_aligned_to(8),
                     "root node {:?} is not aligned to 8 or 16",
                     Address::from_ptr(task)
                 );
